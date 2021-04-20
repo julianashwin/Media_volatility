@@ -76,8 +76,7 @@ clean_data <- clean_data[,c("Date", "Code", "Close", "Open", "Low", "High", "Vol
                             "Index_Open", "Index_abs_Change", "IndexHighLow",
                             "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
                             "mention", "head_mention", "ner_mention", "text", "text_clean")]
-write.csv(booking_subsample,"/Users/julianashwin/Documents/GitHub/BTR.jl/data/booking_semisynth_sample.csv",
-          row.names = FALSE)
+write.csv(clean_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE)
 
 
 
