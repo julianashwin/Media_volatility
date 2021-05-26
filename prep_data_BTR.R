@@ -1,5 +1,6 @@
 setwd("~/Documents/GitHub/Media_volatility")
 rm(list=ls())
+
 require(plm)
 require(stringr)
 require(stargazer)
@@ -7,6 +8,7 @@ require(ggplot2)
 require(reshape2)
 require(urca)
 require(lfe)
+require(tm)
 
 clean_dir <- "/Users/julianashwin/Documents/DPhil/Clean_Data/"
 
@@ -64,7 +66,10 @@ text_corpus <- tm_map(text_corpus, stemDocument)
 text_corpus <- tm_map(text_corpus, stripWhitespace)
 clean_data$text_clean <- sapply(text_corpus, as.character)
 clean_data$text_clean <- gsub(" *\\b[[:alpha:]]{1,2}\\b *", " ", clean_data$text_clean)
+clean_data$text_clean <- gsub("£", " ", clean_data$text_clean)
 clean_data$text_clean <- str_squish(clean_data$text_clean)
+
+clean_data$text[which(clean_data$text== "NA. NA")] <- NA
 
 
 ## Export 
@@ -76,7 +81,8 @@ clean_data <- clean_data[,c("Date", "Code", "Close", "Open", "Low", "High", "Vol
                             "Index_Open", "Index_abs_Change", "IndexHighLow",
                             "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
                             "mention", "head_mention", "ner_mention", "text", "text_clean")]
-write.csv(clean_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE)
+write.csv(clean_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE,
+          na = "")
 
 
 
