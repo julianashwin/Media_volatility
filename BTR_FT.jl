@@ -307,6 +307,7 @@ for K in Ks
     slda2opts.CVEM = :none
     slda2opts.xregs = Array{Int64,1}([])
     slda2opts.interactions = Array{Int64,1}([])
+    slda2opts.ntopics = K
 
     ## Initialise BTRModel object
     slda2crps_tr = create_btrcrps(all_data, slda2opts.ntopics)
@@ -327,7 +328,7 @@ for K in Ks
 
     slda2_TE = blr_ω[2]
 
-    TE_Krobustness_df[:,"sLDA_K"*string(K)] = sort(blr_ω_post[2,:])
+    TE_Krobustness_df[:,"sLDA_K"*string(slda2opts.ntopics)] = sort(blr_ω_post[2,:])
 
 end
 
