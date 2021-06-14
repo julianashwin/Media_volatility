@@ -208,7 +208,7 @@ mse_blr = mean((all_data.y .- predict_blr).^2)
 
 
 """
-Estimate BTR
+Estimate BTR with interaction
 """
 ## Include x regressors by changing the options
 btropts.xregs = [1,2,3,4,5,6,7,8,9,10,11,12]
@@ -237,7 +237,7 @@ pplxy_btr = btrmodel.pplxy
 
 
 """
-Estimate BTR without CVEM
+Estimate BTR with interaction
 """
 
 TE_Krobustness_df = DataFrame(NoText_reg = sort(blr_coeffs_post[2,:]))
@@ -258,6 +258,27 @@ for K in Ks
         sort(btrmodel_noCVEM.ω_post[(K+length(btropts_noCVEM.interactions)*K+1),:])
 end
 
+
+"""
+Estimate BTR without interaction
+"""
+
+for K in Ks
+    display("Estimating with "*string(K)*" topics")
+    btropts_noint = deepcopy(btropts)
+    btropts_noint.interactions = Array{Int64}([])
+    btropts_noint.CVEM = :none
+    btropts_noint.ntopics = K
+    btropts_noint.mse_conv = 2
+
+    btrcrps_tr = create_btrcrps(all_data, btropts_noint.ntopics)
+    btrmodel_noint = BTRModel(crps = btrcrps_tr, options = btropts_noint)
+    ## Estimate BTR with EM-Gibbs algorithm
+    btrmodel_noint = BTRemGibbs(btrmodel_noint)
+
+    TE_Krobustness_df[:,"BTR_noint_K"*string(K)] =
+        sort(btrmodel_noint.ω_post[(K+length(btropts_noint.interactions)*K+1),:])
+end
 
 
 
@@ -386,8 +407,8 @@ Plot treatment effects
 """
 ## Identify columns for each model
 NoText_cols = occursin.("NoText",names(TE_Krobustness_df))
-BTR_cols = occursin.("BTR_noCVEM",names(TE_Krobustness_df))
-BTR_CVEM_cols = occursin.("BTR_CVEM",names(TE_Krobustness_df))
+BTRint_cols = occursin.("BTR_noCVEM",names(TE_Krobustness_df))
+BTR_cols = occursin.("BTR_noint",names(TE_Krobustness_df))
 LDA_cols = occursin.("LDA_",names(TE_Krobustness_df)) .& .!(occursin.("s",names(TE_Krobustness_df)))
 sLDA_cols = occursin.("sLDA_",names(TE_Krobustness_df))
 
@@ -419,8 +440,6 @@ function plot_estimates(est_df, Ks, label, cols, est_color)
 end
 
 
-model_names = ["BTR (no CVEM)","BTR (CVEM)", "LDA", "sLDA", "NoText BLR"]
-nmodels = length(model_names)
 plt1 = plot(legend = false, xlim = (0,maximum(Ks)+2), ylim = (-0.5, 0.5),
     xlabel = "Number of Topics", ylabel = "Estimate Treatment Effect",
     title = "FT media coverage effect")
@@ -428,23 +447,10 @@ plot!([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], linestyle = :dash,color =:red,
     label = "Ground truth", legend = :topright)
 # Add various model estimates
 plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
-plot_estimates(TE_Krobustness_df, Ks, "BTR (sentiment interaction)", BTR_cols, :blue)
-plot_estimates(TE_Krobustness_df, Ks, "BTR", BTR_CVEM_cols, :lightblue)
+plot_estimates(TE_Krobustness_df, Ks, "BTR", BTR_cols, :lightblue)
+plot_estimates(TE_Krobustness_df, Ks, "BTR (sentiment interaction)", BTRint_cols, :blue)
 plot_estimates(TE_Krobustness_df, Ks, "LDA", LDA_cols, :green)
 plot_estimates(TE_Krobustness_df, Ks, "sLDA", sLDA_cols, :orange)
-# Add scholar results
-plot!([2,5,10,15,20,25,30,40,50], scholar_df.w1_median, color = :pink, label = "SCHOLAR")
-scatter!([2,5,10,15,20,25,30,40,50], scholar_df.w1_median, color = :pink, label = "")
-plot!([2,5,10,15,20,25,30,40,50], scholar_df.w1_median, ribbon=(scholar_df.w1_upper.-
-    scholar_df.w1_median, scholar_df.w1_median.- scholar_df.w1_lower),
-    color = :pink, label = "", fillalpha = 0.5)
-
-plot!([2,5,10,15,20,25,30,40,50], scholar_CVEM_df.w1_median, color = :purple, label = "SCHOLAR (CV)")
-scatter!([2,5,10,15,20,25,30,40,50], scholar_CVEM_df.w1_median, color = :purple, label = "")
-plot!([2,5,10,15,20,25,30,40,50], scholar_CVEM_df.w1_median, ribbon=(scholar_CVEM_df.w1_upper.-
-    scholar_CVEM_df.w1_median, scholar_CVEM_df.w1_median.- scholar_CVEM_df.w1_lower),
-    color = :purple, label = "", fillalpha = 0.5)
-
 plot!(size = (500,400))
 
 
