@@ -225,83 +225,68 @@ blr_coeffs, blr_σ2, blr_notext_coeffs_post, σ2_post = BLR_Gibbs(all_data.y, re
 ## Dataframe with all samples across multiple runs
 TE_Krobustness_df = DataFrame(NoText_reg = sort(repeat(blr_notext_coeffs_post[3,:], nruns)))
 for k in Ks
-    TE_Krobustness_df[:,Symbol("BTR_noCVEM_K"*string(k))] .= 0.
+    TE_Krobustness_df[:,Symbol("sLDA_K"*string(k))] .= 0.
 end
 ## Dataframe with just median across multiple runs
 TE_Krobustness_medians_df = DataFrame(run = 1:nruns)
 for k in Ks
-    TE_Krobustness_medians_df[:,Symbol("BTR_noCVEM_K"*string(k))] .= 0.
+    TE_Krobustness_medians_df[:,Symbol("sLDA_K"*string(k))] .= 0.
 end
 
 
 """
-Estimate BTR without CVEM
+Estimate sLDA without CVEM
 """
 # Multiple runs for each K
-for nn in 1:nruns
-    for K in Ks
+for K in Ks
+    slda2opts = deepcopy(opts)
+    slda2opts.CVEM = :none
+    slda2opts.ntopics = K
+    slda2opts.mse_conv = 2
+    slda2opts.xregs = Array{Int64,1}([])
+    slda2opts.interactions = Array{Int64,1}([])
+
+    ## Initialise BTRModel object
+    slda2crps_tr = create_btrcrps(all_data, slda2opts.ntopics)
+    slda2model = BTRModel(crps = slda2crps_tr, options = slda2opts)
+
+    ## Estimate sLDA on residuals
+    for nn in 1:nruns
         display("Estimating BTR without CVEM with "*string(K)*" topics for the "*string(nn)*"th time")
-        btropts_noCVEM = deepcopy(opts)
-        btropts_noCVEM.CVEM = :none
-        btropts_noCVEM.ntopics = K
-        btropts_noCVEM.mse_conv = 2
+        slda2model = BTRemGibbs(slda2model)
 
-        btrcrps_tr = create_btrcrps(all_data, btropts_noCVEM.ntopics)
-        btrmodel_noCVEM = BTRModel(crps = btrcrps_tr, options = btropts_noCVEM)
+        ## Identify residuals to train second stage regression
+        residuals_slda = all_data.y .- slda2model.regressors*slda2model.ω
 
-        ## Estimate BTR with EM-Gibbs algorithm
-        btrmodel_noCVEM = BTRemGibbs(btrmodel_noCVEM)
+        ## Bayesian linear regression on training set
+        regressors_slda = hcat(ones(size(all_data.x,1)),all_data.x)
+        # No fixed effect, no batch
+        blr_ω, blr_σ2, blr_ω_post, blr_σ2_post = BLR_Gibbs(residuals_slda, regressors_slda,
+            m_0 = slda2opts.μ_ω, σ_ω = slda2opts.σ_ω, a_0 = slda2opts.a_0, b_0 = slda2opts.b_0,
+            iteration = slda2opts.M_iters)
+
+        slda2_TE = blr_ω[2]
 
         ## Save posterior dist of treatment effect
         obs = (1+((nn-1)*opts.M_iters)):(nn*opts.M_iters)
-        TE_Krobustness_df[obs,"BTR_noCVEM_K"*string(K)] = sort(btrmodel_noCVEM.ω_post[btropts_noCVEM.ntopics+1,:])
+        TE_Krobustness_df[obs,"sLDA_K"*string(K)] = sort(blr_ω_post[2,:])
+
         # Save median of treatment effect estimate
-        TE_Krobustness_medians_df[nn,Symbol("BTR_noCVEM_K"*string(K))] =
-            median(btrmodel_noCVEM.ω_post[btropts_noCVEM.ntopics+1,:])
+        TE_Krobustness_medians_df[nn,Symbol("sLDA_K"*string(K))] =
+            median(sort(blr_ω_post[2,:]))
     end
 
-    CSV.write("BTR_results/multiple_runs/TE_BTR_posteriors.csv",
+    CSV.write("BTR_results/multiple_runs/TE_sLDA_posteriors.csv",
         TE_Krobustness_df)
-    CSV.write("BTR_results/multiple_runs/TE_BTR_median.csv",
+    CSV.write("BTR_results/multiple_runs/TE_sLDA_median.csv",
         TE_Krobustness_medians_df)
 end
 
 
 
 
-
 """
-Estimate BTR with interaction
-"""
-## Include x regressors by changing the options
-btropts.xregs =
-btropts.interactions = Array{Int64}([])
-## Initialise BTRModel object
-btrcrps_all = create_btrcrps(all_data, btropts.ntopics)
-btrmodel = BTRModel(crps = btrcrps_all, options = btropts)
-## Estimate BTR with EM-Gibbs algorithm
-btrmodel.options.plot_ω = false
-btrmodel = BTRemGibbs(btrmodel)
-## Plot results
-BTR_plot(btrmodel.β, btrmodel.ω_post, btrmodel.crps.vocab,
-    plt_title = "Yelp BTR", fontsize = 5, nwords = 10, title_size = 10,
-    interactions = btropts.interactions)
-if save_files; savefig("figures/Yelp_BTR/Yelp_BTR.pdf"); end;
-
-## Estimate of treatment effect
-sort(btrmodel.ω_post[(btropts.ntopics+length(btropts.interactions)*btropts.ntopics+1),:])
-btrmodel.ω[(btropts.ntopics+length(btropts.interactions)*btropts.ntopics+1)]
-
-
-## Out of sample prediction in test set
-mse_btr = btrmodel.mse
-pplxy_btr = btrmodel.pplxy
-
-
-
-
-"""
-Estimate BTR with interaction
+Estimate sLDA
 """
 
 TE_Krobustness_df = DataFrame(NoText_reg = sort(blr_coeffs_post[2,:]))
