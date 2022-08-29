@@ -7,17 +7,170 @@ require(ggplot2)
 require(reshape2)
 require(urca)
 require(lfe)
+require(fixest)
+require(lubridate)
+require(DoubleML)
+
+
+
+felm_DK_se <- function(reg_formula, df_panel){
+  
+  # Estimate regressions with feols and felm
+  model <- feols(reg_formula, data = df_panel)
+  model_felm <- felm(reg_formula, data = df_panel)
+  
+  stopifnot(length(model_felm$se) ==  
+              length(summary(model, vcov = DK ~ period)$coeftable[,"Std. Error"]))
+  model_felm$se <- summary(model, vcov = DK ~ period)$coeftable[,"Std. Error"]
+  model_felm$tval <- summary(model, vcov = DK ~ period)$coeftable[,"t value"]
+  model_felm$pval <- summary(model, vcov = DK ~ period)$coeftable[,"Pr(>|t|)"]
+  return(model_felm)
+}
 
 # Import the panel data
 clean_dir <- "~/Documents/DPhil/Clean_Data"
 import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
 total_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
+# Create factors for day and period
+total_data <- total_data[order(total_data$Date),]
+total_data$period <- as.numeric(
+  factor(total_data$Date, labels=unique(total_data$Date), ordered=TRUE))
+total_data$year <- str_sub(total_data$Date, 1, 4)
+total_data$year_period <- as.numeric(
+  factor(total_data$year, labels=unique(total_data$year), ordered=TRUE))
+cor.test(total_data$year_period, total_data$Turnover)
+
 # Format for panel data analysis
-total_data <- pdata.frame(total_data, index = c("Code", "Date"))
+total_data$firm_highlow <- ave(total_data$highlow, total_data$Code)
+total_data <- total_data[which(!is.na(total_data$Volume)),]
+total_data$total_Volume <- ave(total_data$Volume, total_data$period, FUN = sum)
+total_data$mean_Volume <- ave(total_data$Volume, total_data$period, FUN = mean)
+total_data$firm_lVolume <- ave(total_data$lVolume, total_data$Code, FUN = mean)
+total_data$firmyear_lVolume <- ave(total_data$lVolume, total_data$Code, total_data$year, FUN = mean)
+mean(total_data$highlow[which(total_data$Code == "EVRE.L")])
 
-summary(felm(highlow ~ mention|Code+Date|0|Code+Date, total_data))
 
+plot_df <- total_data[!duplicated(total_data$period),]
+ggplot(plot_df, aes(x = as.Date(Date))) + 
+  geom_line(aes(y = log(mean_Volume)))
+panel_df <- data.frame(total_data[,which(!str_detect(names(total_data), "text"))])
+
+summary(lm(log(mean_Volume) ~ weekday, plot_df))
+
+
+"
+Time varying effect
+"
+model <- summary(feols(highlow ~ mention*as.factor(year)-mention-as.factor(year) + 
+                         highlow_1lag |Code + period, panel_df), vcov = DK ~ period)
+coef_table
+
+
+
+"
+Mediation effect
+"
+
+
+
+
+panel_df$lVol_m_firmyear <- panel_df$lVolume - panel_df$firm_lVolume
+summary(feols(highlow ~ mention + highlow_1lag + lVol_m_firmyear |Code + Date, panel_df))
+
+summary(lm(log(mean_Volume) ~ weekday, plot_df))
+
+summary(feols(highlow ~ mention*year_period |Code, panel_df))
+summary(feols(highlow ~ mention + log(Volume) |Code, total_data))
+summary(feols(highlow ~ mention + log(Volume) + Volume_logdiff |Code, total_data))
+summary(felm(highlow ~ mention + period|Code+Date|0|Code+Date, total_data))
+
+summary(felm(highlow ~ mention*as.factor(year_period)-as.factor(year_period)|Code + Date, total_data))
+
+model <- feols(highlow ~ mention*as.factor(year_period)-as.factor(year_period)|Code + Date, total_data)
+
+
+model1 <- feols(highlow ~ log(Volume) + highlow_1lag|Code+Date, 
+                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$mention)),])
+model2 <- feols(mention ~ log(Volume) + highlow_1lag|Code+Date, 
+                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$mention)),])
+summary(lm(model1$residuals ~ model2$residuals))
+
+model1 <- feols(highlow ~ log(Volume) + highlow_1lag|Code+Date, 
+                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$highlow_1lag)),])
+model2 <- feols(mention ~ log(Volume)|Code+Date, 
+                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$highlow_1lag)),])
+
+summary(lm(model1$residuals ~ model2$residuals))
+
+
+model <- feols(log(Volume) ~ mention + log(Volume_1lag)  + log(Volume_2lag) + log(Volume_3lag) +
+                 highlow_1lag + highlow_2lag + highlow_3lag + 
+                 abs_intra_day + VI_put + VI_call
+               |Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+
+
+model <- feols(highlow ~ mention + log(Volume) + highlow_1lag|Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+model <- feols(log(Volume) ~ mention + log(Volume_1lag)|Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+
+model <- feols(highlow ~  mention + log(Volume) + 
+                 highlow_1lag + 
+                 log(Volume_1lag) + log(Volume_2lag) |Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+model <- feols(highlow ~  mention + 
+                 highlow_1lag + VI_put + 
+                 log(Volume_1lag) + log(Volume_2lag) |Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+
+model <- feols(Volume_logdiff ~  mention , panel_df)
+summary(model, vcov = DK ~ period)
+
+model <- feols(highlow ~ mention + abs_intra_day + 
+                 VI_put + VI_put_1lag + highlow_1lag|Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+
+model <- feols(VI_put ~ VI_put_1lag |Code+Date, panel_df)
+summary(model, vcov = DK ~ period)
+
+summary(felm(log(Volume) ~ mention + highlow + highlow_1lag|Code+Date|0|Code+Date, total_data))
+
+summary(felm(highlow ~ mention + highlow_1lag|Code+Date|0|Code+Date, total_data))
+
+summary(felm(highlow ~ mention + highlow_1lag+ VI_put + VI_call|Code+Date|0|Code+Date, total_data))
+
+model <- feols(highlow ~ mention 
+               + highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
+               + abs_intra_day + VI_put + VI_call|Code+Date, total_data)
+summary(model, vcov = "iid")
+summary(model, vcov = DK ~ Date)
+summary(model, vcov = NW ~ Code + Date)
+summary(model, vcov = "twoway")
+
+
+model <- feols(highlow ~ mention + log(Volume) + Volume + 
+               + highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
+               + abs_intra_day + VI_put + VI_call|Code+Date, total_data)
+summary(model, vcov = "iid")
+summary(model, vcov = DK ~ Date)
+summary(model, vcov = NW ~ Code + Date)
+summary(model, vcov = "twoway")
+
+
+
+ggplot(panel_df) +
+  geom_density(aes(x = log(Volume)))
+ggplot(panel_df) +
+  geom_density(aes(x = Volume_logdiff))
+ggplot(total_data) +
+  geom_density(aes(x = log(Turnover)))
+ggplot(total_data) +
+  geom_density(aes(x = year_period))
+
+summary(felm(highlow ~ mention + highlow_1lag+ VI_put + VI_call + log(Volume) + log(Turnover)
+             |Code+Date|0|Code+Date, total_data))
 
 # Add an abspChange for robustness
 total_data$pChange <- total_data$pChange*100

@@ -31,7 +31,7 @@ clean_data$highlow_3lag <- plm::lag(clean_data$highlow,3)
 clean_data$highlow_4lag <- plm::lag(clean_data$highlow,4)
 clean_data$highlow_5lag <- plm::lag(clean_data$highlow,5)
 # volume lags
-clean_data$lVolume <- log(clean_data$Volume)
+clean_data$lVolume <- log(1+clean_data$Volume)
 clean_data$lVolume_1lag <- plm::lag(clean_data$lVolume,1)
 clean_data$lVolume_2lag <- plm::lag(clean_data$lVolume,2)
 clean_data$lVolume_3lag <- plm::lag(clean_data$lVolume,3)
