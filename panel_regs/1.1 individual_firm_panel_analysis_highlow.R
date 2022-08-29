@@ -1,4 +1,4 @@
-setwd("~/Documents/GitHub/Firm_level_news_analysis")
+setwd("~/Documents/GitHub/Media_volatility")
 rm(list=ls())
 require(plm)
 require(stringr)
@@ -10,11 +10,13 @@ require(lfe)
 
 # Import the panel data
 clean_dir <- "~/Documents/DPhil/Clean_Data"
-import_filename = paste(clean_dir, "FT/matched/all_equityprices_companyarticles1.csv", sep = "/")
+import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
 total_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
 # Format for panel data analysis
 total_data <- pdata.frame(total_data, index = c("Code", "Date"))
+
+summary(felm(highlow ~ mention|Code+Date|0|Code+Date, total_data))
 
 
 # Add an abspChange for robustness

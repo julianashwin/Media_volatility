@@ -21,13 +21,28 @@ clean_data <- pdata.frame(clean_data, index = c("Code", "Date"))
 clean_data$intra_day <- 100*((clean_data$Close - clean_data$Open)/clean_data$Open)
 clean_data$return <- 100*((clean_data$Close - plm::lag(clean_data$Close))/plm::lag(clean_data$Close))
 
+# returns
 clean_data$abs_return <- abs(clean_data$return)
 clean_data$abs_intra_day <- abs(clean_data$intra_day)
+# highlow lags
 clean_data$highlow_1lag <- plm::lag(clean_data$highlow,1)
 clean_data$highlow_2lag <- plm::lag(clean_data$highlow,2)
 clean_data$highlow_3lag <- plm::lag(clean_data$highlow,3)
 clean_data$highlow_4lag <- plm::lag(clean_data$highlow,4)
 clean_data$highlow_5lag <- plm::lag(clean_data$highlow,5)
+# volume lags
+clean_data$lVolume <- log(clean_data$Volume)
+clean_data$lVolume_1lag <- plm::lag(clean_data$lVolume,1)
+clean_data$lVolume_2lag <- plm::lag(clean_data$lVolume,2)
+clean_data$lVolume_3lag <- plm::lag(clean_data$lVolume,3)
+clean_data$lVolume_4lag <- plm::lag(clean_data$lVolume,4)
+clean_data$lVolume_5lag <- plm::lag(clean_data$lVolume,5)
+# implied vol lag
+clean_data$VI_put_1lag <- plm::lag(clean_data$VI_put,1)
+clean_data$VI_put_2lag <- plm::lag(clean_data$VI_put,2)
+clean_data$VI_put_3lag <- plm::lag(clean_data$VI_put,3)
+clean_data$VI_put_4lag <- plm::lag(clean_data$VI_put,4)
+clean_data$VI_put_5lag <- plm::lag(clean_data$VI_put,5)
 
 model1 = lm(highlow ~ mention, data = clean_data)
 summary(model1)
@@ -47,9 +62,17 @@ model7 <- felm(formula = highlow ~ mention + plm::lag(highlow, 1:5) + abs_intra_
 summary(model7)
 
 model8 <- felm(formula = highlow ~ mention + highlow_1lag + highlow_2lag + highlow_3lag + 
-                 highlow_4lag + highlow_5lag + abs_intra_day +
-                 VI_put + VI_call + IndexHighLow | Code , data = clean_data)
+                 highlow_4lag + highlow_5lag + abs_intra_day + abs_return + lVolume + 
+                 VI_put + VI_call | Code + Date , data = clean_data)
 summary(model8)
+
+model9 <- felm(highlow ~ mention + abs_intra_day +  highlow_1lag + lVolume-Code + VI_put| Code + Date , data = clean_data)
+summary(model9)
+
+
+model9 <- felm(highlow ~ mention*lVolume + mention*abs_intra_day + highlow_1lag + VI_put
+               | Code + Date , data = clean_data)
+summary(model9)
 
 
 
@@ -72,16 +95,26 @@ clean_data$text_clean <- str_squish(clean_data$text_clean)
 clean_data$text[which(clean_data$text== "NA. NA")] <- NA
 
 
+# Remove Schroeder articles that contain a reference to the chancellor
+false_obs = which((clean_data$Code == "SDR.L") & str_detect(clean_data$text_clean, "chancellor"))
+clean_data$text[false_obs] <- NA
+clean_data$text_clean[false_obs] <- ""
+clean_data$mention[false_obs] <- 0  
+  
+  
+
 ## Export 
-clean_data <- clean_data[,c("Date", "Code", "Close", "Open", "Low", "High", "Volume", 
+export_data <- clean_data[,c("Date", "Code", "Close", "Open", "Low", "High", "Volume", 
                             "Turnover", "VI_put", "VI_call", "abs_intra_day", 
-                            "return", "abs_return", "highlow", "highlow_1lag", 
-                            "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
+                            "return", "abs_return", "highlow", "lVolume",
+                            "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
+                            "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag", 
+                            "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
                             "Index_Price", "Index_Change", "Index_High", "Index_Low", 
                             "Index_Open", "Index_abs_Change", "IndexHighLow",
                             "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
                             "mention", "head_mention", "ner_mention", "text", "text_clean")]
-write.csv(clean_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE,
+write.csv(export_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE,
           na = "")
 
 

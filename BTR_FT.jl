@@ -20,11 +20,11 @@ using Plots, StatsPlots, StatsBase, Plots.PlotMeasures, TableView
 
 ## Load data
 df = CSV.read("/Users/julianashwin/Documents/DPhil/Clean_Data/FT/matched/BTR_FT_data.csv",
-    DataFrame, threaded = false)
+    DataFrame, ntasks = 1)
 
 ## Keep those where all values of highlow are available
 numeric_cols = [:highlow, :highlow_1lag, :highlow_2lag, :highlow_3lag,
-    :highlow_4lag, :highlow_5lag, :abs_intra_day]
+    :highlow_4lag, :highlow_5lag, :VI_put, :VI_call]
 df = df[completecases(df[:,numeric_cols]),:]
 ## Clean up and compute loughran sentiment
 df.text_clean[ismissing.(df.text_clean)] .= ""
@@ -45,7 +45,6 @@ end
 df.highlow_firmav = group_mean(df.highlow, df.Code_id, same_length = true)
 df.highlow_dateav = group_mean(df.highlow, df.Date_id, same_length = true)
 
-
 showtable(df)
 
 
@@ -53,27 +52,25 @@ showtable(df)
 plot(df.highlow[1:200], label = ["highlow volatility"], legend = :bottomleft,xguidefontsize=8)
 plot!(df.abs_intra_day[1:200], label = ["abs return"])
 
-fm = @formula(highlow ~ mention + abs_intra_day + highlow_1lag +
+fm = @formula(highlow ~ mention + highlow_1lag +
     highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
     highlow_dateav + highlow_firmav + sentiment)
 display(lm(fm, df))
 
-fm = @formula(highlow ~ mention + abs_intra_day + highlow_1lag +
+fm = @formula(highlow ~ mention + sentiment + highlow_1lag +
     highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
     highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
 display(lm(fm, df))
 
-df_VIadj = deepcopy(df)
-df_VIadj.VI_put[ismissing.(df_VIadj.VI_put)] .= 0.
-df_VIadj.VI_call[ismissing.(df_VIadj.VI_call)] .= 0.
-
-df_VIadj.VI_put = Float64.(df_VIadj.VI_put)
-df_VIadj.VI_call = Float64.(df_VIadj.VI_call)
-fm = @formula(highlow ~ mention + abs_intra_day + highlow_1lag +
+fm = @formula(highlow ~ mention + lVolume + sentiment + highlow_1lag +
     highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
     highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
-display(lm(fm, df_VIadj))
+display(lm(fm, df))
 
+fm = @formula(abs_intra_day ~ mention + sentiment + highlow_1lag +
+    highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+    highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
+display(lm(fm, df))
 
 
 
@@ -95,11 +92,11 @@ df.doc_idx = 1:nrow(df)
 Prepare data for estimation
 """
 ## Create labels and covariates
-x = hcat(df_VIadj.mention, df_VIadj.sentiment, df_VIadj.abs_intra_day,
-    df_VIadj.highlow_dateav, df_VIadj.highlow_firmav, df_VIadj.highlow_1lag,
-    df_VIadj.highlow_2lag, df_VIadj.highlow_3lag, df_VIadj.highlow_4lag,
-    df_VIadj.highlow_5lag, df_VIadj.VI_put, df_VIadj.VI_call)
-y = df_VIadj.highlow
+x = hcat(df.mention, df.sentiment,
+    df.highlow_dateav, df.highlow_firmav,
+    df.highlow_1lag, df.highlow_2lag, df.highlow_3lag, df.highlow_4lag, df.highlow_5lag,
+    df.VI_put, df.VI_call)
+y = df.highlow
 docidx_vars = df.doc_idx
 docidx_dtm = df.doc_idx
 D = length(unique(docidx_dtm))
@@ -193,7 +190,7 @@ opts.ω_tol = 0.015 # Convergence tolerance for regression coefficients ω
 opts.rel_tol = true # Whether to use a relative convergence criteria rather than just absolute
 
 ## Regressors
-opts.xregs = [1,2,3,4,5,6,7,8,9,10,11,12]
+opts.xregs = [1,2,3,4,5,6,7,8,9,10,11]
 opts.interactions = Array{Int64,1}([])
 
 """
@@ -207,6 +204,23 @@ blr_coeffs, blr_σ2, blr_coeffs_post, σ2_post = BLR_Gibbs(all_data.y, regressor
 ## Out-of-sample
 predict_blr = regressors*blr_coeffs
 mse_blr = mean((all_data.y .- predict_blr).^2)
+
+
+"""
+Estimate default version
+"""
+## Create model object
+btropts = deepcopy(opts)
+btrcrps_all = create_btrcrps(all_data, btropts.ntopics)
+btrmodel = BTRModel(crps = btrcrps_all, options = btropts)
+## Estimate BTR with EM-Gibbs algorithm
+btrmodel.options.plot_ω = false
+btrmodel = BTRemGibbs(btrmodel)
+
+BTR_plot(btrmodel.β, btrmodel.ω_post, btrmodel.crps.vocab,
+    left_mar = 1,
+    plt_title = "FT BTR", fontsize = 10, nwords = 5, title_size = 10)
+
 
 
 """
@@ -271,10 +285,9 @@ end
 
 
 """
-Estimate BTR with interaction
+Estimate BTR without interaction
 """
 ## Include x regressors by changing the options
-btropts.xregs =
 btropts.interactions = Array{Int64}([])
 ## Initialise BTRModel object
 btrcrps_all = create_btrcrps(all_data, btropts.ntopics)
