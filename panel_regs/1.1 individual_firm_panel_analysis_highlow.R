@@ -10,7 +10,7 @@ require(lfe)
 require(fixest)
 require(lubridate)
 require(DoubleML)
-
+library(mediation)
 
 
 felm_DK_se <- function(reg_formula, df_panel){
@@ -41,36 +41,181 @@ total_data$year_period <- as.numeric(
   factor(total_data$year, labels=unique(total_data$year), ordered=TRUE))
 cor.test(total_data$year_period, total_data$Turnover)
 
-# Format for panel data analysis
-total_data$firm_highlow <- ave(total_data$highlow, total_data$Code)
-total_data <- total_data[which(!is.na(total_data$Volume)),]
-total_data$total_Volume <- ave(total_data$Volume, total_data$period, FUN = sum)
-total_data$mean_Volume <- ave(total_data$Volume, total_data$period, FUN = mean)
-total_data$firm_lVolume <- ave(total_data$lVolume, total_data$Code, FUN = mean)
-total_data$firmyear_lVolume <- ave(total_data$lVolume, total_data$Code, total_data$year, FUN = mean)
-mean(total_data$highlow[which(total_data$Code == "EVRE.L")])
+
+panel_df <- pdata.frame(total_data, index = c("Code", "period"))
+# abs_intra lags
+panel_df$abs_intra_1lag <- plm::lag(panel_df$abs_intra_day,1)
+panel_df$abs_intra_2lag <- plm::lag(panel_df$abs_intra_day,2)
+panel_df$abs_intra_3lag <- plm::lag(panel_df$abs_intra_day,3)
+panel_df$abs_intra_4lag <- plm::lag(panel_df$abs_intra_day,4)
+panel_df$abs_intra_5lag <- plm::lag(panel_df$abs_intra_day,5)
+panel_df$abs_return_1lag <- plm::lag(panel_df$abs_return,1)
+panel_df$abs_return_2lag <- plm::lag(panel_df$abs_return,2)
+panel_df$abs_return_3lag <- plm::lag(panel_df$abs_return,3)
+panel_df$abs_return_4lag <- plm::lag(panel_df$abs_return,4)
+panel_df$abs_return_5lag <- plm::lag(panel_df$abs_return,5)
+panel_df$return_1lag <- plm::lag(panel_df$return,1)
+panel_df$return_2lag <- plm::lag(panel_df$return,2)
+panel_df$return_3lag <- plm::lag(panel_df$return,3)
+panel_df$return_4lag <- plm::lag(panel_df$return,4)
+panel_df$return_5lag <- plm::lag(panel_df$return,5)
 
 
-plot_df <- total_data[!duplicated(total_data$period),]
-ggplot(plot_df, aes(x = as.Date(Date))) + 
-  geom_line(aes(y = log(mean_Volume)))
-panel_df <- data.frame(total_data[,which(!str_detect(names(total_data), "text"))])
+panel_df$Close_1lag <- plm::lag(panel_df$Close,1)
 
-summary(lm(log(mean_Volume) ~ weekday, plot_df))
+panel_df$abs_overnight <- abs((panel_df$Open-panel_df$Close_1lag)/panel_df$Close_1lag)
+
+panel_df <- data.frame(panel_df[,which(!str_detect(names(panel_df), "text"))])
 
 
 "
 Time varying effect
 "
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
+model_df <- panel_df[complete.cases(panel_df[,med_vars]),]
 model <- summary(feols(highlow ~ mention*as.factor(year)-mention-as.factor(year) + 
-                         highlow_1lag |Code + period, panel_df), vcov = DK ~ period)
-coef_table
+                         highlow_1lag + VI_put|Code + period, model_df), vcov = DK ~ period)
+coef_table <- data.frame(model$coeftable)
+coef_table$year <- rownames(coef_table)
+coef_table <- coef_table[which(!(coef_table$year %in% c("highlow_1lag", "VI_put"))),]
+coef_table$year <- as.numeric(str_remove(coef_table$year, "mention:as\\.factor\\(year\\)"))
 
+ggplot(coef_table, aes(x = year)) + theme_bw() + 
+  geom_ribbon(aes(ymax = Estimate + 1.96*abs(Std..Error), ymin = Estimate - 1.96*abs(Std..Error)), alpha = 0.3) +
+  geom_line(aes( y = Estimate)) + 
+  geom_hline(aes(yintercept = 0), linetype = "dashed")
+  
 
 
 "
 Mediation effect
+mention -> lVolume -> highlow
 "
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
+model_df <- panel_df[complete.cases(panel_df[,med_vars]),]
+
+model_df$firm_highlow <- ave(model_df$highlow, model_df$Code)
+model_df$time_highlow <- ave(model_df$highlow, model_df$Date)
+model_df$firm_lVolume <- ave(model_df$lVolume, model_df$Code, FUN = mean)
+model_df$time_lVolume <- ave(model_df$lVolume, model_df$Date, FUN = mean)
+model_df$firmyear_highlow <- ave(model_df$highlow, model_df$Code, model_df$year, FUN = mean)
+model_df$firmyear_lVolume <- ave(model_df$lVolume, model_df$Code, model_df$year, FUN = mean)
+model_df$lVolume_diff <- model_df$lVolume - model_df$lVolume_1lag
+model_df$lVolume_excess <- model_df$lVolume - model_df$firmyear_lVolume
+
+
+df_agg <- aggregate(model_df[,c("mention", "highlow", "lVolume")], 
+                    by = list(firm = model_df$Code), FUN = mean)
+cor.test(df_agg$mention, df_agg$lVolume)
+
+
+summary(lm(return ~ mention, model_df))
+
+## Total effect
+fit.totaleffect <- felm_DK_se(highlow ~ mention + abs_overnight +
+                          Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                          lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+                          VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                          abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                          abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                          return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
+                        | Code + period, model_df)
+summary(fit.totaleffect)
+# Mediator model 
+fit.mediator <- felm_DK_se(lVolume ~ mention + abs_overnight +
+                       Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
+                     | Code + Date, model_df)
+summary(fit.mediator)
+# Control for mediator on outcome
+fit.dv <- felm_DK_se(highlow ~ mention + abs_overnight + abs_intra_day + lVolume +
+                                Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                                lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+                                VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                                abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                                abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                                return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
+                              | Code + period, model_df)
+summary(fit.dv)
+
+
+
+## Step 1: identify the total effect (X on Y)
+fit.totaleffect <- lm(highlow ~ mention + highlow_1lag + lVolume_1lag + VI_put + 
+                        Code + time_highlow + time_lVolume, model_df)
+summary(fit.totaleffect)
+fit.totaleffect <- lm(highlow ~ mention + highlow_1lag + lVolume_1lag + 
+                        firm_highlow + time_highlow, model_df)
+summary(fit.totaleffect)
+
+
+## Step 2: effect of independent variable on the mediator (X on Z)
+# Must be significant
+# Can include covariates here
+fit.mediator <- lm(lVolume ~ mention + highlow_1lag + lVolume_1lag + VI_put + 
+                     Code + time_highlow + time_lVolume, model_df)
+summary(fit.mediator)
+fit.mediator <- lm(lVolume ~ mention + highlow_1lag + lVolume_1lag + 
+                     firm_highlow + time_highlow, model_df)
+summary(fit.mediator)
+
+## Step 3: effect of the mediator on the dependent variable (Z on Y)
+# Control for independent variable!
+fit.dv <- felm(highlow ~ mention  + lVolume + abs_intra_day +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag
+               | Code + Date, model_df)
+summary(fit.dv)
+fit.dv <- lm(highlow ~ mention + lVolume + highlow_1lag + lVolume_1lag + VI_put + 
+               Code, model_df)
+summary(fit.dv)
+fit.dv <- lm(highlow ~ mention + lVolume + highlow_1lag + lVolume_1lag + 
+               firm_highlow + time_highlow, model_df)
+summary(fit.dv)
+
+
+## Step 4: Causal mediation analysis that estimates and combines models
+total_effect <- fit.totaleffect$coefficients["mention",]
+acme <- fit.mediator$coefficients["mention",]*fit.dv$coefficients["abs_intra_day",]
+acme/total_effect
+total_effect <- fit.totaleffect$coefficients["mention",]
+acme <- fit.mediator$coefficients["mention",]*fit.dv$coefficients["lVolume",]
+acme/total_effect
+
+
+fit.mediator$coefficients["mention"]
+
+results <- mediate(fit.mediator, fit.dv, treat = "mention", mediator = "lVolume", boot = T, sims = 50)
+                  #,covariates = c("highlow_1lag","lVolume_1lag","VI_put","Code","time_highlow","time_lVolume"))
+summary(results)
+plot(results)
+
+
+Xnames <- c("highlow_1lag", "lVolume_1lag", "firm_highlow", "time_highlow")
+m.med <- multimed(outcome = "highlow", med.main = "lVolume", 
+                  med.alt = "abs_intra_day", treat = "mention", 
+                  covariates = Xnames, data = model_df, sims = 25)
+summary(m.med)
+
+
+
+
+## Step 2b: effect of independent variable on the mediator (X on Z)
+# Must be significant
+# Can include covariates here
+fit.mediatorb <- felm(abs_intra_day ~ mention + highlow_1lag + VI_put | Code + Date, model_df)
+summary(fit.mediatorb)
+
+## Step 3b: effect of the mediator on the dependent variable (Z on Y)
+# Control for independent variable!
+fit.dvb <- felm(highlow~mention + abs_intra_day + highlow_1lag + VI_put | Code + Date, model_df)
+summary(fit.dvb)
 
 
 
