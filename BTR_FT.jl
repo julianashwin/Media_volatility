@@ -221,6 +221,7 @@ BTR_plot(btrmodel.β, btrmodel.ω_post, btrmodel.crps.vocab,
     left_mar = 1,
     plt_title = "FT BTR", fontsize = 10, nwords = 5, title_size = 10)
 
+btrmodel.ω[(btrmodel.options.ntopics+1):end]
 
 
 """

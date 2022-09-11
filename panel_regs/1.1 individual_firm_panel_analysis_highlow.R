@@ -32,39 +32,8 @@ clean_dir <- "~/Documents/DPhil/Clean_Data"
 import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
 total_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
-# Create factors for day and period
-total_data <- total_data[order(total_data$Date),]
-total_data$period <- as.numeric(
-  factor(total_data$Date, labels=unique(total_data$Date), ordered=TRUE))
-total_data$year <- str_sub(total_data$Date, 1, 4)
-total_data$year_period <- as.numeric(
-  factor(total_data$year, labels=unique(total_data$year), ordered=TRUE))
-cor.test(total_data$year_period, total_data$Turnover)
-
 
 panel_df <- pdata.frame(total_data, index = c("Code", "period"))
-# abs_intra lags
-panel_df$abs_intra_1lag <- plm::lag(panel_df$abs_intra_day,1)
-panel_df$abs_intra_2lag <- plm::lag(panel_df$abs_intra_day,2)
-panel_df$abs_intra_3lag <- plm::lag(panel_df$abs_intra_day,3)
-panel_df$abs_intra_4lag <- plm::lag(panel_df$abs_intra_day,4)
-panel_df$abs_intra_5lag <- plm::lag(panel_df$abs_intra_day,5)
-panel_df$abs_return_1lag <- plm::lag(panel_df$abs_return,1)
-panel_df$abs_return_2lag <- plm::lag(panel_df$abs_return,2)
-panel_df$abs_return_3lag <- plm::lag(panel_df$abs_return,3)
-panel_df$abs_return_4lag <- plm::lag(panel_df$abs_return,4)
-panel_df$abs_return_5lag <- plm::lag(panel_df$abs_return,5)
-panel_df$return_1lag <- plm::lag(panel_df$return,1)
-panel_df$return_2lag <- plm::lag(panel_df$return,2)
-panel_df$return_3lag <- plm::lag(panel_df$return,3)
-panel_df$return_4lag <- plm::lag(panel_df$return,4)
-panel_df$return_5lag <- plm::lag(panel_df$return,5)
-
-
-panel_df$Close_1lag <- plm::lag(panel_df$Close,1)
-
-panel_df$abs_overnight <- abs((panel_df$Open-panel_df$Close_1lag)/panel_df$Close_1lag)
-
 panel_df <- data.frame(panel_df[,which(!str_detect(names(panel_df), "text"))])
 
 

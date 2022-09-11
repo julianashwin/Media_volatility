@@ -1,27 +1,128 @@
 setwd("~/Documents/GitHub/Media_volatility")
 rm(list=ls())
 
-require(plm)
-require(stringr)
-require(stargazer)
-require(ggplot2)
-require(reshape2)
-require(urca)
-require(lfe)
-require(tm)
+library(plm)
+library(stringr)
+library(stargazer)
+library(ggplot2)
+library(reshape2)
+library(urca)
+library(lfe)
+library(tm)
+library(readxl)
+library(SentimentAnalysis)
+library(vader)
+library(tictoc)
+
+
+standardise <- function(x){
+  x <- (x - mean(x, na.rm = TRUE))/sd(x, na.rm = TRUE)
+  return(x)
+}
+
 
 clean_dir <- "/Users/julianashwin/Documents/DPhil/Clean_Data/"
 
 # Import the panel data
 import_filename = paste(clean_dir, "FT/matched/clean_equities_articles.csv", sep = "/")
-clean_data <- read.csv(import_filename, stringsAsFactors = FALSE)
-clean_data <- pdata.frame(clean_data, index = c("Code", "Date"))
+equity_data <- read.csv(import_filename, stringsAsFactors = FALSE)
+
+# Create factors for day and period year and month
+equity_data <- equity_data[order(equity_data$Date),]
+equity_data$period <- as.numeric(
+  factor(equity_data$Date, labels=unique(equity_data$Date), ordered=TRUE))
+equity_data$year <- str_sub(equity_data$Date, 1, 4)
+equity_data$year_period <- as.numeric(
+  factor(equity_data$year, labels=unique(equity_data$year), ordered=TRUE))
+cor.test(equity_data$year_period, equity_data$Turnover)
+equity_data$month <- as.numeric(str_sub(equity_data$Date, 6, 7))
 
 
-clean_data$intra_day <- 100*((clean_data$Close - clean_data$Open)/clean_data$Open)
-clean_data$return <- 100*((clean_data$Close - plm::lag(clean_data$Close))/plm::lag(clean_data$Close))
+# Import the sector data
+equity_data$NACE_code <- as.numeric(str_replace_all(as.character(equity_data$NACE_code), "/", ""))
+equity_data$NACE_industry <- NA
+
+# Get NACE IO industries for the equity data
+bridging <- read.csv("/Users/julianashwin/Documents/DPhil/Raw_Data/UK_macro/input-output/Translating_IO_to_NACE.csv", 
+                     stringsAsFactors = FALSE)
+for (i in 1:nrow(bridging)){
+  ind <- bridging[i, "OI_code"]
+  upper <- bridging[i, "NAIC_upperbound"]
+  lower <- bridging[i, "NAIC_lowerbound"]
+  equity_data[which(equity_data$NACE_code >= lower & equity_data$NACE_code <= upper), "NACE_industry"] <- ind
+}
+equity_data$NACE_industry <- str_replace_all(equity_data$NACE_industry, " ", "_")
+equity_data$NACE_industry <- str_replace_all(equity_data$NACE_industry, "\\&", "and")
+equity_data$NACE_industry <- str_replace_all(equity_data$NACE_industry, "\\.", "_")
+equity_data$NACE_industry <- str_replace_all(equity_data$NACE_industry, "\\,", "_")
+equity_data$NACE_industry <- str_replace_all(equity_data$NACE_industry, "-", "to")
+equity_data$Sector <- as.character(equity_data$NACE_industry)
+
+
+"
+Import and merge the LSPM data
+"
+# Bridging table for company codes
+company_codes = read.csv(paste0(clean_dir, "FT/company_codes.csv"), stringsAsFactors = F)
+company_codes$g1 <- company_codes$LSPM_number
+# LSPM data
+lspm_df <- read.csv(paste0(clean_dir, "UK_equities/LSPM_data.csv"), stringsAsFactors = F)
+names(lspm_df) <- tolower(names(lspm_df))
+# Combine to get codes consistent with the equity price data
+lspm_short_df <- merge(lspm_df, company_codes[,c("g1", "Code")], by = "g1")
+lspm_short_df$Date <- as.Date(as.character(lspm_short_df$p1), format = "%Y%m%d")
+lspm_short_df <- lspm_short_df[which(lspm_short_df$Date < "2018-01-01"),]
+lspm_short_df <- lspm_short_df[order(lspm_short_df$Code, lspm_short_df$Date),]
+# Keep relevant variables
+lspm_short_df$name <- lspm_short_df$g33
+lspm_short_df$birth_date <- as.Date(as.character(lspm_short_df$g28), format = "%Y%m%d")
+lspm_short_df$market_value <- lspm_short_df$a4
+lspm_short_df$market_value[which(lspm_short_df$market_value == 0)] <- NA
+lspm_short_df$lmarket_value <- log(lspm_short_df$market_value)
+lspm_short_df$beta <- lspm_short_df$a5
+lspm_short_df$variability <- lspm_short_df$a6
+lspm_short_df$spec_risk <- lspm_short_df$a7
+lspm_short_df$dividend <- lspm_short_df$a9
+# Some lags of lspm variables
+lspm_short_df <- pdata.frame(lspm_short_df, index = c("Code", "Date"))
+lspm_short_df$market_value_1lag <- plm::lag(lspm_short_df$market_value,1)
+lspm_short_df$lmarket_value_1lag <- plm::lag(lspm_short_df$lmarket_value,1)
+lspm_short_df$beta_1lag <- plm::lag(lspm_short_df$beta,1)
+lspm_short_df$variability_1lag <- plm::lag(lspm_short_df$variability,1)
+lspm_short_df$spec_risk_1lag <- plm::lag(lspm_short_df$spec_risk,1)
+lspm_short_df$dividend_1lag <- plm::lag(lspm_short_df$dividend,1)
+lspm_short_df <- data.frame(lspm_short_df)
+# Order Companies into quantiles by size
+lspm_short_df$size_quantile <- NA
+for (dd in unique(lspm_short_df$Date)){
+  qs <- quantile(lspm_short_df$market_value[which(lspm_short_df$Date==dd)], probs = seq(0,1,1/3), na.rm = T)
+  lspm_short_df$size_quantile[which(lspm_short_df$Date==dd & lspm_short_df$market_value <= qs[2])] <- "Small"
+  lspm_short_df$size_quantile[which(lspm_short_df$Date==dd & 
+          lspm_short_df$market_value > qs[2] & lspm_short_df$market_value <= qs[3])] <- "Medium"
+  lspm_short_df$size_quantile[which(lspm_short_df$Date==dd & 
+          lspm_short_df$market_value > qs[3] & lspm_short_df$market_value <= qs[4])] <- "Large"
+}
+
+
+clean_data <- merge(equity_data, lspm_short_df[,c("Code", "year", "month", "name", "birth_date",
+                                "lmarket_value", "market_value", "beta", "variability", "dividend",
+                                "spec_risk", "lmarket_value_1lag", "market_value_1lag", "beta_1lag", 
+                                "variability_1lag", "dividend_1lag", "spec_risk_1lag", "size_quantile")], 
+                    by = c("year", "month", "Code"), all.x = T)
+ggplot(as.data.frame(clean_data)) + geom_density(aes(x = dividend))
+clean_data$Date <- as.Date(clean_data$Date)
+clean_data <- clean_data[order(clean_data$Code, clean_data$Date),]
+ggplot(clean_data[which(clean_data$Code == "VOD.L"),]) + theme_bw() +
+  geom_line(aes(x = Date, y = dividend/Close))
+
+table(clean_data$size_quantile[which(clean_data$Code == "AAL.L")])
+
+# Use panel structure to get lags and returns
+clean_data <- pdata.frame(clean_data, index = c("Code", "period"))
 
 # returns
+clean_data$intra_day <- 100*((clean_data$Close - clean_data$Open)/clean_data$Open)
+clean_data$return <- 100*((clean_data$Close - plm::lag(clean_data$Close))/plm::lag(clean_data$Close))
 clean_data$abs_return <- abs(clean_data$return)
 clean_data$abs_intra_day <- abs(clean_data$intra_day)
 # highlow lags
@@ -37,21 +138,144 @@ clean_data$lVolume_2lag <- plm::lag(clean_data$lVolume,2)
 clean_data$lVolume_3lag <- plm::lag(clean_data$lVolume,3)
 clean_data$lVolume_4lag <- plm::lag(clean_data$lVolume,4)
 clean_data$lVolume_5lag <- plm::lag(clean_data$lVolume,5)
-# implied vol lag
+# implied vol lag (put)
 clean_data$VI_put_1lag <- plm::lag(clean_data$VI_put,1)
 clean_data$VI_put_2lag <- plm::lag(clean_data$VI_put,2)
 clean_data$VI_put_3lag <- plm::lag(clean_data$VI_put,3)
 clean_data$VI_put_4lag <- plm::lag(clean_data$VI_put,4)
 clean_data$VI_put_5lag <- plm::lag(clean_data$VI_put,5)
+# implied vol lag (call)
+clean_data$VI_call_1lag <- plm::lag(clean_data$VI_call,1)
+clean_data$VI_call_2lag <- plm::lag(clean_data$VI_call,2)
+clean_data$VI_call_3lag <- plm::lag(clean_data$VI_call,3)
+clean_data$VI_call_4lag <- plm::lag(clean_data$VI_call,4)
+clean_data$VI_call_5lag <- plm::lag(clean_data$VI_call,5)
+# abs_intra lags
+clean_data$abs_intra_1lag <- plm::lag(clean_data$abs_intra_day,1)
+clean_data$abs_intra_2lag <- plm::lag(clean_data$abs_intra_day,2)
+clean_data$abs_intra_3lag <- plm::lag(clean_data$abs_intra_day,3)
+clean_data$abs_intra_4lag <- plm::lag(clean_data$abs_intra_day,4)
+clean_data$abs_intra_5lag <- plm::lag(clean_data$abs_intra_day,5)
+# abs return lags
+clean_data$abs_return_1lag <- plm::lag(clean_data$abs_return,1)
+clean_data$abs_return_2lag <- plm::lag(clean_data$abs_return,2)
+clean_data$abs_return_3lag <- plm::lag(clean_data$abs_return,3)
+clean_data$abs_return_4lag <- plm::lag(clean_data$abs_return,4)
+clean_data$abs_return_5lag <- plm::lag(clean_data$abs_return,5)
+# return lags
+clean_data$return_1lag <- plm::lag(clean_data$return,1)
+clean_data$return_2lag <- plm::lag(clean_data$return,2)
+clean_data$return_3lag <- plm::lag(clean_data$return,3)
+clean_data$return_4lag <- plm::lag(clean_data$return,4)
+clean_data$return_5lag <- plm::lag(clean_data$return,5)
+# Overnight return 
+clean_data$Close_1lag <- plm::lag(clean_data$Close,1)
+clean_data$overnight <- 100*(clean_data$Open-clean_data$Close_1lag)/clean_data$Close_1lag
+clean_data$abs_overnight <- abs(clean_data$overnight)
+
+# Sentiment
+clean_data <- data.frame(clean_data)
+clean_data$text <- paste(paste(clean_data$headline, clean_data$main_text, sep = ". "))
+clean_data$text[which(clean_data$text ==  "NA. NA")] <- NA
+clean_data$LM_sentiment <- NA
+pb = txtProgressBar(min = 1, max = nrow(clean_data), initial = 1) 
+for (ii in which(!is.na(clean_data$text))){
+  para <- clean_data$text[ii]
+  lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+  clean_data$LM_sentiment[ii] <- lm_sentiment[1,1]
+  setTxtProgressBar(pb,ii)
+}
+clean_data$LM_sentiment <- standardise(clean_data$LM_sentiment)
+clean_data$LM_sentiment[which(is.na(clean_data$LM_sentiment))] <- 0
+#tic()
+#clean_data$vader_sentiment <- NA
+#vader_results <- vader_df(clean_data$text[which(!is.na(clean_data$text))[sample(1:1000,1)]])
+#toc()
+clean_data <- clean_data[complete.cases(clean_data[,c("highlow", "mention", "lVolume")]),]
+
+
+
 
 model1 = lm(highlow ~ mention, data = clean_data)
 summary(model1)
-model2 <- felm(formula = highlow ~ mention | Code, data = clean_data)
+direct_model <- felm(formula = highlow ~ mention + 
+                       abs_overnight + 
+                       plm::lag(highlow,1:5) + plm::lag(lVolume,1:5) + 
+                       plm::lag(abs_return,1:5) +
+                       #VI_put + 
+                       VI_put_1lag 
+                     + lVolume
+                     | Code + Date , data = clean_data)
+summary(direct_model)
+mediator_model <- felm(formula = lVolume ~ mention + highlow_1lag + lVolume_1lag + VI_put_1lag + abs_overnight
+                     | Code + Date , data = clean_data)
+summary(mediator_model)
+both_model <- felm(formula = highlow ~ mention + lVolume + highlow_1lag + lVolume_1lag + VI_put_1lag + abs_overnight
+                       | Code + Date , data = clean_data)
+summary(both_model)
+mediator_model$coefficients[1]*both_model$coefficients[2]
+
+
+
+model2 <- felm(formula = abs_intra_day ~ mention + abs_overnight + 
+                 abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag
+               | Code + Date , data = clean_data)
 summary(model2)
-model3 <- felm(formula = highlow ~ mention | Code + Date, data = clean_data)
+model2 <- felm(formula = lVolume ~ mention + abs_overnight + 
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag
+               | Code + Date , data = clean_data)
+summary(model2)
+
+model2 <- felm(formula = intra_day ~ LM_sentiment + overnight + 
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
+               | Code + Date , data = clean_data)
+summary(model2)
+model3 <- felm(formula = highlow ~ mention*weekday-weekday + LM_sentiment + 
+                 abs_overnight + overnight +
+                 VI_put_1lag*VI_call_1lag*VI_put_2lag*VI_call_2lag + 
+                 highlow_1lag*highlow_2lag*highlow_3lag 
+               | Code + Date, data = clean_data)
 summary(model3)
-model4 <- felm(formula = highlow ~ mention +  plm::lag(highlow, 1:5) | Code + Date, data = clean_data)
-summary(model4)
+
+clean_data <- pdata.frame(clean_data, index = c("Code", "period"))
+
+direct_model <- felm(formula = highlow ~ mention + lVolume + #abs_intra_day + 
+                       abs_overnight + 
+                       plm::lag(lVolume,1:5) +
+                       VI_put + VI_put_1lag + #VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call + VI_call_1lag + #VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       plm::lag(abs_intra_day,1:5) + #abs_intra_1lag + #abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag +
+                       #variability_1lag + spec_risk_1lag + #lmarket_value +
+                       plm::lag(highlow,1:10) #+ highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
+                     | Code + Date, data = clean_data)
+summary(direct_model)
+mediate_model <- felm(formula = lVolume ~ mention + lmarket_value + abs_overnight + 
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       VI_put_1lag + + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag +
+                        variability_1lag + spec_risk_1lag
+                     | Code + Date, data = clean_data)
+summary(mediate_model)
+both_model <- felm(formula = highlow ~ mention + lVolume + lmarket_value + abs_overnight + 
+                     highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+                     lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                     VI_put_1lag + + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                     abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                     abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                     return_1lag + return_2lag + return_3lag + return_4lag + return_5lag +
+                     variability_1lag + spec_risk_1lag
+                   | Code + Date, data = clean_data)
+summary(both_model)
+
+results = mediate(fit.mediator, fit.dv, treat = "Sepal.Length", mediator = "mediator", boot = T)
+
+
+
 model5 <- felm(formula = highlow ~ mention + plm::lag(highlow, 1:5) + abs_intra_day | Code + Date, data = clean_data)
 summary(model5)
 model6 <- felm(formula = highlow ~ mention + plm::lag(highlow, 1:5) + abs_intra_day +
@@ -102,20 +326,25 @@ clean_data$text_clean[false_obs] <- ""
 clean_data$mention[false_obs] <- 0  
   
   
-
+names(clean_data)
 ## Export 
-export_data <- clean_data[,c("Date", "Code", "Close", "Open", "Low", "High", "Volume", 
-                            "Turnover", "VI_put", "VI_call", "abs_intra_day", 
-                            "return", "abs_return", "highlow", "lVolume",
-                            "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
-                            "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag", 
-                            "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
-                            "Index_Price", "Index_Change", "Index_High", "Index_Low", 
-                            "Index_Open", "Index_abs_Change", "IndexHighLow",
-                            "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
-                            "mention", "head_mention", "ner_mention", "text", "text_clean")]
+export_data <- clean_data[,c("Date", "Code", "Company", 
+                             "Close", "Open", "Low", "High", "Volume", "lVolume", 
+                             "Turnover", "VI_put", "VI_call", "intra_day", "abs_intra_day", 
+                             "return", "abs_return", "highlow", "overnight", "abs_overnight",
+                             "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
+                             "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag", 
+                             "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
+                             "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
+                             "abs_return_1lag", "abs_return_2lag", "abs_return_3lag", "abs_return_4lag", "abs_return_5lag", 
+                             "return_1lag", "return_2lag", "return_3lag", "return_4lag", "return_5lag", 
+                             "Index_Price", "Index_Change", "Index_High", "Index_Low", 
+                             "Index_Open", "Index_abs_Change", "IndexHighLow",
+                             "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
+                             "mention", "head_mention", "ner_mention", "text", "text_clean")]
 write.csv(export_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE,
           na = "")
+
 
 
 
