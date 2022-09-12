@@ -131,6 +131,11 @@ clean_data$highlow_2lag <- plm::lag(clean_data$highlow,2)
 clean_data$highlow_3lag <- plm::lag(clean_data$highlow,3)
 clean_data$highlow_4lag <- plm::lag(clean_data$highlow,4)
 clean_data$highlow_5lag <- plm::lag(clean_data$highlow,5)
+clean_data$highlow_6lag <- plm::lag(clean_data$highlow,6)
+clean_data$highlow_7lag <- plm::lag(clean_data$highlow,7)
+clean_data$highlow_8lag <- plm::lag(clean_data$highlow,8)
+clean_data$highlow_9lag <- plm::lag(clean_data$highlow,9)
+clean_data$highlow_10lag <- plm::lag(clean_data$highlow,10)
 # volume lags
 clean_data$lVolume <- log(1+clean_data$Volume)
 clean_data$lVolume_1lag <- plm::lag(clean_data$lVolume,1)
@@ -138,6 +143,11 @@ clean_data$lVolume_2lag <- plm::lag(clean_data$lVolume,2)
 clean_data$lVolume_3lag <- plm::lag(clean_data$lVolume,3)
 clean_data$lVolume_4lag <- plm::lag(clean_data$lVolume,4)
 clean_data$lVolume_5lag <- plm::lag(clean_data$lVolume,5)
+clean_data$lVolume_6lag <- plm::lag(clean_data$lVolume,6)
+clean_data$lVolume_7lag <- plm::lag(clean_data$lVolume,7)
+clean_data$lVolume_8lag <- plm::lag(clean_data$lVolume,8)
+clean_data$lVolume_9lag <- plm::lag(clean_data$lVolume,9)
+clean_data$lVolume_10lag <- plm::lag(clean_data$lVolume,10)
 # implied vol lag (put)
 clean_data$VI_put_1lag <- plm::lag(clean_data$VI_put,1)
 clean_data$VI_put_2lag <- plm::lag(clean_data$VI_put,2)
@@ -156,18 +166,33 @@ clean_data$abs_intra_2lag <- plm::lag(clean_data$abs_intra_day,2)
 clean_data$abs_intra_3lag <- plm::lag(clean_data$abs_intra_day,3)
 clean_data$abs_intra_4lag <- plm::lag(clean_data$abs_intra_day,4)
 clean_data$abs_intra_5lag <- plm::lag(clean_data$abs_intra_day,5)
+clean_data$abs_intra_6lag <- plm::lag(clean_data$abs_intra_day,6)
+clean_data$abs_intra_7lag <- plm::lag(clean_data$abs_intra_day,7)
+clean_data$abs_intra_8lag <- plm::lag(clean_data$abs_intra_day,8)
+clean_data$abs_intra_9lag <- plm::lag(clean_data$abs_intra_day,9)
+clean_data$abs_intra_10lag <- plm::lag(clean_data$abs_intra_day,10)
 # abs return lags
 clean_data$abs_return_1lag <- plm::lag(clean_data$abs_return,1)
 clean_data$abs_return_2lag <- plm::lag(clean_data$abs_return,2)
 clean_data$abs_return_3lag <- plm::lag(clean_data$abs_return,3)
 clean_data$abs_return_4lag <- plm::lag(clean_data$abs_return,4)
 clean_data$abs_return_5lag <- plm::lag(clean_data$abs_return,5)
+clean_data$abs_return_6lag <- plm::lag(clean_data$abs_return,6)
+clean_data$abs_return_7lag <- plm::lag(clean_data$abs_return,7)
+clean_data$abs_return_8lag <- plm::lag(clean_data$abs_return,8)
+clean_data$abs_return_9lag <- plm::lag(clean_data$abs_return,9)
+clean_data$abs_return_10lag <- plm::lag(clean_data$abs_return,10)
 # return lags
 clean_data$return_1lag <- plm::lag(clean_data$return,1)
 clean_data$return_2lag <- plm::lag(clean_data$return,2)
 clean_data$return_3lag <- plm::lag(clean_data$return,3)
 clean_data$return_4lag <- plm::lag(clean_data$return,4)
 clean_data$return_5lag <- plm::lag(clean_data$return,5)
+clean_data$return_6lag <- plm::lag(clean_data$return,6)
+clean_data$return_7lag <- plm::lag(clean_data$return,7)
+clean_data$return_8lag <- plm::lag(clean_data$return,8)
+clean_data$return_9lag <- plm::lag(clean_data$return,9)
+clean_data$return_10lag <- plm::lag(clean_data$return,10)
 # Overnight return 
 clean_data$Close_1lag <- plm::lag(clean_data$Close,1)
 clean_data$overnight <- 100*(clean_data$Open-clean_data$Close_1lag)/clean_data$Close_1lag
@@ -194,18 +219,29 @@ clean_data$LM_sentiment[which(is.na(clean_data$LM_sentiment))] <- 0
 clean_data <- clean_data[complete.cases(clean_data[,c("highlow", "mention", "lVolume")]),]
 
 
+panel_df <- clean_data[,c("Code", "Date", "period",
+                          "highlow", "mention", "lVolume", "abs_overnight", "VI_put", "VI_call",
+                          "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag",
+                          "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag",
+                          "abs_return_1lag", "abs_return_2lag", "abs_return_3lag", "abs_return_4lag", "abs_return_5lag",
+                          "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag",
+                          "VI_call_1lag", "VI_call_2lag", "VI_call_3lag", "VI_call_4lag", "VI_call_5lag",
+                          "IndexHighLow")]
+panel_df <- panel_df[complete.cases(panel_df),]
+panel_df$firm_highlow <- ave(panel_df$highlow, panel_df$Code)
+panel_df$day_highlow <- ave(panel_df$highlow, panel_df$Date)
 
 
-model1 = lm(highlow ~ mention, data = clean_data)
+model1 = lm(highlow ~ mention, data = panel_df)
 summary(model1)
-direct_model <- felm(formula = highlow ~ mention + 
+direct_model <- felm(formula = highlow ~ mention + lVolume + 
                        abs_overnight + 
-                       plm::lag(highlow,1:5) + plm::lag(lVolume,1:5) + 
-                       plm::lag(abs_return,1:5) +
-                       #VI_put + 
-                       VI_put_1lag 
-                     + lVolume
-                     | Code + Date , data = clean_data)
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag + 
+                       firm_highlow + day_highlow, data = panel_df)
+                     #| Code + Date , data = panel_df)
 summary(direct_model)
 mediator_model <- felm(formula = lVolume ~ mention + highlow_1lag + lVolume_1lag + VI_put_1lag + abs_overnight
                      | Code + Date , data = clean_data)
@@ -238,20 +274,25 @@ model3 <- felm(formula = highlow ~ mention*weekday-weekday + LM_sentiment +
 summary(model3)
 
 clean_data <- pdata.frame(clean_data, index = c("Code", "period"))
+clean_data$abs_LM <- abs(clean_data$LM_sentiment)
 
-direct_model <- felm(formula = highlow ~ mention + lVolume + #abs_intra_day + 
+clean_data$firm_highlow <- ave(clean_data$highlow, clean_data$Code)
+
+
+direct_model <- felm(formula = highlow ~ mention + #lVolume + #LM_sentiment + #abs_intra_day + 
                        abs_overnight + 
-                       plm::lag(lVolume,1:5) +
+                       plm::lag(lVolume,1:10) +
                        VI_put + VI_put_1lag + #VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
                        VI_call + VI_call_1lag + #VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                       plm::lag(abs_intra_day,1:5) + #abs_intra_1lag + #abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
-                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag +
+                       #plm::lag(abs_intra_day,1:10) + #abs_intra_1lag + #abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                       plm::lag(abs_return,1:10) + #abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       plm::lag(return,1:10) + #return_1lag + return_2lag + return_3lag + return_4lag + return_5lag +
                        #variability_1lag + spec_risk_1lag + #lmarket_value +
-                       plm::lag(highlow,1:10) #+ highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
-                     | Code + Date, data = clean_data)
+                       plm::lag(highlow,1:10) 
+                     + firm_highlow + IndexHighLow, data = clean_data)
+                     #| Code + Date, data = clean_data)
 summary(direct_model)
-mediate_model <- felm(formula = lVolume ~ mention + lmarket_value + abs_overnight + 
+mediate_model <- felm(formula = lVolume ~ mention + lmarket_value + abs_overnight +
                        highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
                        lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
                        VI_put_1lag + + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
@@ -328,23 +369,37 @@ clean_data$mention[false_obs] <- 0
   
 names(clean_data)
 ## Export 
-export_data <- clean_data[,c("Date", "Code", "Company", 
-                             "Close", "Open", "Low", "High", "Volume", "lVolume", 
-                             "Turnover", "VI_put", "VI_call", "intra_day", "abs_intra_day", 
-                             "return", "abs_return", "highlow", "overnight", "abs_overnight",
-                             "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
-                             "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag", 
-                             "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
-                             "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
-                             "abs_return_1lag", "abs_return_2lag", "abs_return_3lag", "abs_return_4lag", "abs_return_5lag", 
-                             "return_1lag", "return_2lag", "return_3lag", "return_4lag", "return_5lag", 
-                             "Index_Price", "Index_Change", "Index_High", "Index_Low", 
-                             "Index_Open", "Index_abs_Change", "IndexHighLow",
-                             "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
-                             "mention", "head_mention", "ner_mention", "text", "text_clean")]
+export_cols <- c("Date", "Code", "Company", 
+                 "Close", "Open", "Low", "High", "Volume", "lVolume", 
+                 "Turnover", "VI_put", "VI_call", "intra_day", "abs_intra_day", 
+                 "return", "abs_return", "highlow", "overnight", "abs_overnight",
+                 "highlow_1lag", "highlow_2lag", "highlow_3lag", "highlow_4lag", "highlow_5lag", 
+                 "highlow_6lag", "highlow_7lag", "highlow_8lag", "highlow_9lag", "highlow_10lag", 
+                 "lVolume_1lag", "lVolume_2lag", "lVolume_3lag", "lVolume_4lag", "lVolume_5lag", 
+                 "lVolume_6lag", "lVolume_7lag", "lVolume_8lag", "lVolume_9lag", "lVolume_10lag", 
+                 "VI_put_1lag", "VI_put_2lag", "VI_put_3lag", "VI_put_4lag", "VI_put_5lag", 
+                 "VI_call_1lag", "VI_call_2lag", "VI_call_3lag", "VI_call_4lag", "VI_call_5lag", 
+                 "abs_return_1lag", "abs_return_2lag", "abs_return_3lag", "abs_return_4lag", "abs_return_5lag",
+                 "abs_return_6lag", "abs_return_7lag", "abs_return_8lag", "abs_return_9lag", "abs_return_10lag",
+                 "abs_intra_1lag", "abs_intra_2lag", "abs_intra_3lag", "abs_intra_4lag", "abs_intra_5lag",
+                 "abs_intra_6lag", "abs_intra_7lag", "abs_intra_8lag", "abs_intra_9lag", "abs_intra_10lag",
+                 "return_1lag", "return_2lag", "return_3lag", "return_4lag", "return_5lag", 
+                 "return_6lag", "return_7lag", "return_8lag", "return_9lag", "return_10lag", 
+                 "Index_Price", "Index_Change", "Index_High", "Index_Low", 
+                 "Index_Open", "Index_abs_Change", "IndexHighLow",
+                 "market_size", "lmarket_size", "beta", "variability", "spec_risk", "dividend",
+                 "market_size_1lag", "lmarket_size_1lag", "beta_1lag", "variability_1lag", "spec_risk_1lag", "dividend_1lag",
+                 "weekday", "Monday", "Tuesday", "Wednesday", "Thursday",
+                 "mention", "head_mention", "ner_mention", "LM_sentiment", "text", "text_clean")
+export_cols[which(!(export_cols %in% names(clean_data)))]
+export_data <- clean_data[,export_cols]
 write.csv(export_data,paste0(clean_dir, "FT/matched/BTR_FT_data.csv"), row.names = FALSE,
           na = "")
 
 
 
 
+lspm_short_df$beta <- lspm_short_df$a5
+lspm_short_df$variability <- lspm_short_df$a6
+lspm_short_df$spec_risk <- lspm_short_df$a7
+lspm_short_df$dividend
