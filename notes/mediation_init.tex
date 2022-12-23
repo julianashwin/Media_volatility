@@ -4,6 +4,7 @@
 \usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage[dvipsnames]{xcolor}
+\usepackage{float}
 
 
 \newcommand{\indep}{\perp\!\!\!\!\perp} 
@@ -91,7 +92,7 @@
 	Imai and Yamamoto (2013) develop methods for dealing with multiple mediators. 
 	\begin{itemize}
 		\item When the mediators are not causally related, this is not that difficult. For each mediator, the other mediators are neither pre-treatment nor post-treatment confounders. The effects can thus be consistently estimated by applying the mediate function successively to each one, ignoring the existence of other mediators.
-		\item Wheb multiple mediators are causally related (or equivaklently when one mediator acts as a post-treatment confounder for the other) the analysis requires new assumptions. 
+		\item When multiple mediators are causally related (or equivalently when one mediator acts as a post-treatment confounder for the other) the analysis requires new assumptions. 
 	\end{itemize}
 	~\\
 	Let $W_i(t)$ be the vector of potential values of alternative mediators given treatment status $t$. Allow the causal dependence of the primary mediator $M_i(t,w)$ and the outcome $Y_i(t,m,w)$ on $W$. The causal mediation effect is then expressed as 
@@ -214,25 +215,233 @@
 		\item Use the outcome model to make potential outcome predictions. If we are interested in the ACME under treatment, predict outcome under treatment using value of mediator predicted in treatment condition, then the outcome under the treatment condition but with the mediator prediction from the control condition. The ACME is then the difference between the outcome predictions using the two different values of the mediator. So this corresponds to the average difference in volatility from fixing treatment status but changing volume between levels with and without a FT article.
 	\end{enumerate}
 	Uncertainty can then be computed with bootstraps or Monte Carlo approximations. 
-	
+	\\~\\
 	\textbf{Sensitivity analysis.} Identifying the causal mechanism requires sequential ignorability, which cannot be tested with the observed data. But we can evaluate the robustness of empirical results to a violation of this assumption. This tests whether a slight violation of the assumption of sequential ignorability would lead to substantively different conclusions. 
 	\\~\\
 	Following Imai, Keele and Tingley (2010) and Imai, Keele and Yamamoto (2010), define $\rho$ as the correlation between $\epsilon_{i2}$, the error in the mediation model, and $\epsilon_{i3}$, the error in the outcome model. If sequential ignorability holds, all relevant pre-treatment confounders have been conditioned on and so $\rho$ is equal to zero. However, if $\rho$ is non zero then some hidden confounder is biasing the ACME estimate. In other words, there is some factor which both affects the outcome and the mediator in some way. This could for example be if there is genuinely new information contained in the news articles. This could both affect volatility and trading volumes that day. Although $\rho$ is unknown, we can calculate the values of $\rho$ for which the ACME is zero/not significant. 
 	\\~\\
 	This illustrates how even if the exogeneity assumptions hold for both $T$ and $M$, we can still get a biased estimate of the ACME if the outcome is not independent of the mediator conditional on treatment and covariates. 
 	\\~\\
-	The interpretation of $\rho$ is perhaps a little obscure, so instead Imai, Keele and Yamamoto (2010) provide an alternative formulation based on how much the omitted variable would alter the $R^2$ of the mediator and outcome models. For example, if information in the news articles is important in determining volatility or trading volume, then the model excluding this information will have a much smaller $R^2$ than the model that includes it. The relative change in $R^2$
-	
-	
-	
-	
-	
-	
-	
-	\textcolor{red}{}
+	The interpretation of $\rho$ is perhaps a little obscure, so instead Imai, Keele and Yamamoto (2010) provide an alternative formulation based on how much the omitted variable would alter the $R^2$ of the mediator and outcome models. For example, if information in the news articles is important in determining volatility or trading volume, then the model excluding this information will have a much smaller $R^2$ than the model that includes it. The relative change in $R^2$ can be used as a sensitivity parameter - e.g. if the confounding factor would only need to explain a very small portion of the remaining variance for the effect to lose significance, then the effect would be quite weak. 
 	\\~\\
-	\textcolor{red}{Tomorrow - start with reading the Imai paper}
-	\textcolor{red}{Read the Peress paper}
+	This sensitivity analysis of course has limitations:
+	\begin{enumerate}
+		\item It is designed to mimic a pre-treatment confounder, so does not address confounders that are affected by the treatment and confound the relationship between the mediator and the outcome. Imai and Yamamoto (2011) do consider the case of post-treatment confounders though. 
+		\item Sensitivity analysis does not provide any objective criterion to assess sequential ignorability, as it is an irrefutable assumption, so the best it can do is provide some suggestive evidence. 
+	\end{enumerate}
+	~\\
+	
+	
+	
+	\subsection{Applications}
+	
+	\textbf{The Media Framing experiment.} The research question here is how and why media cues influence attitudes towards immigration. Two possible factors:
+	\begin{enumerate}
+		\item Emphasising cost to society should increase opposition (and vice versa for benefits). 
+		\item Whites more likely to oppose immigration when immigrants are non-white. 
+	\end{enumerate}
+	Two possible channels - cues operate through anxiety or through changing beliefs about costs and benefits. So treatment is binary: negative, Hispanic immigrant story or other. Anxiety measures on a quasi-continuous scale. 
+	\\~\\
+	Sensitivity analysis to violation of the sequential ignorability assumption here is checking whether individuals who became more anxious have unobserved  characteristics that differ from those of other individuals and that also influence immigration attitudes. Looking at the outcome for whether immigration should be decreased or increased, test the sensitivity to the correlation between the error terms in the mediator and outcome and so it represents the degree and direction of the unobserved confounding factor between anxiety and immigration preference. When $\rho$ is zero sequential ignorability holds and the true ACME coincides with the estimate. 
+	\\~\\
+	Find that in order for the ACME to be no significantly different from zero, the unobserved confounder that affects both anxiety and immigration preference in the same direction and makes the correlation between the two error terms greater than 0.34. 	
+	\\~\\
+	It's kinda difficult to interpret what this correlation means though, so we can express the degree of sensitivity in terms of the importance of an unobserved confounder in explaining the observed variation in the mediator and outcome variables. To do this we need to make an assumption about the direction in the mediator and outcome models (it would be natural to assume that they move in the same direction in the media framing and media coverage cases). The two sensitivity parameters are bounded above by one minus the $R^2$ of each of the two models (i.e. the proportion of the variance that is not yet explained by the observed predictors). So the upper bounds here are 0.78 for the mediator model and 0.50 for the outcome model. Ceteris paribus, the lower this upper bound is the more robust the estimate will be as there is less room for an unobserved confounder to bias the result. 
+	\\~\\
+	In the media framing case, the true ACME changes sign if the product of these proportions is greater than 0.07. For example, if the subject's fear disposition explains more that 35\% of the variance of the immigration preference and 20\% of the variance in anxiety then the ACME is negative. The positive ACME is therefore robust to confounding because of unmeasured fear when the confounder explains less than around 26\% of the variance in the mediator and outcome. If the effect goes in opposite directions then confounders would make the effect stronger. 
+	\\~\\
+	\textbf{Quality effect of incumbency.} The question here is whether incumbents ``scare off" quality challengers. High quality challengers will be deterred from challenging an incumbent because of the higher cost of defeating an incumbent. In contrast to the original study, the analysis here finds that very little of the incumbency effect is due to scare off. 
+	\\
+	
+	
+	
+	
+	~\\
+	\textbf{Interaction terms.} Researchers have often used interaction terms to identify causal mechanisms. Two uses here: treatment-mediator interaction and treatment-pretreatment covariate interactions. 
+	\\~\\
+	\textbf{Ugandan abduction example.} Sequential ignorability, the abduction occurs randomly and levels of violence witnessed also need to be random, conditioning on whether one was abducted and other pretreatment covariates. In this case, a significant interaction between treatment and mediator provides evidence for the causal mechanism provided sequential ignorability holds. 
+	\\~\\
+	Recall that sequential ignorability implies that 
+	\begin{itemize}
+		\item Treatment assignment is independent of potential outcomes and mediators (given pre-treatment confounders). 
+		\item Observed mediator is ignorable given actual treatment status and pre-treatment confounders. So the outcome is independent of the mediator once we control for treatment and confounders. 
+	\end{itemize}
+	So in the case of the media coverage experiment, this means that: 
+	\begin{itemize}
+		\item Media coverage is independent of potential volatility, given past price movements. 
+		\item Trading volume is independent of volatility, given media coverage and pre-treatment confounders. 
+	\end{itemize}
+	This second assumption is quite stringent.
+	
+	
+	\subsection{Multiple Mediators and Posttreatment confounders}
+	
+	Suppose there's a second mediator that lies on the causal path from $T$ to $Y$.  In general the existence of other causal pathways does \textit{not} cause a problem for the identification of a causal mechanism under standard designs, as long as sequential ignorability is not violated. Not a problem if:
+	\begin{enumerate}
+		\item The two mediators are independent
+		\item One mediator acts through another
+		\item etc...
+	\end{enumerate}
+
+
+	\textbf{Imai and Yamamoto (2013) methodology for causally dependent multiple mechanisms. } Let $W_i(t)$ is the vector of potential values of those alternative mediators given treatment status $t$. To allow the causal dependence of both the primary mediator and outcome on $W$, write the potential mediator and outcome as $M_i(t,w)$ and $Y_i(t,m,w)$ respectively. The causal mediation effect is then 
+	$$
+	\delta_i(t) = Y_i(t, M_i(1, W_i(1)), W_i(t)) - Y_i(t, M_i(0, W_i(0)), W_i(t))
+	$$
+	for $t = 0, 1$. This represents the treatment effects that are transmitted through $M$, irrespective of whether they also come through $W$ or not. 
+	\\~\\
+	The framework is based on the linear structural equations model
+	$$
+	M_i(t,w) = \alpha_2 + \beta_{2i} t + \xi_{2i} w + \mu_{2i} tw + \lambda_{2i} x + \epsilon_{2i}
+	$$
+	$$
+	Y_i(t,m,w) = \alpha_3 + \beta_{3i} t + \gamma_i m + \kappa_i t m + \xi_{3i} w + \mu_{3i} tw + \lambda_{3i} x + \epsilon_{3i}
+	$$
+	
+	
+
+	\section{Imai and Yamamoto (2013) on multiple causal mechanisms}
+	
+	
+	Linear structural equation models assume that multiple mechanisms are causally independent. Here we consider alternative assumptions to identify average causal mediation effects when multiple, causally related mediators exist. 
+	\\~\\
+	Importantly, there is also a sensitivity analysis to examine the robustness of findings to a key identifying assumption. 
+	\\~\\
+	Consider cases where the treatment $T$ can affect $Y$ in three ways:
+	\begin{itemize}
+		\item Through the main mediator $M$
+		\item Through alternative mediator(s) $W$
+		\item Directly. 
+	\end{itemize}
+	
+	In panel (a) of Figure \ref{fig:causal_diags}, the mediators are causally unrelated, so here we can just do standard mediation analysis on $M$ with no further issues. However, in panel (b) $W$ may possibly affect $M$ (but not the other way around)
+
+	\begin{figure}[H]
+		\caption{Multiple Mechanisms}
+		\centering
+		\label{fig:causal_diags}
+		\includegraphics[width=\linewidth]{multiple_mechanisms}
+	\end{figure}
+	
+	Formulate the framework for multiple mechanisms in terms of linear regression models, but there is more flexibility here. 
+	\\~\\
+	First, look at the Robins (2003) assumptions where:
+	\begin{itemize}
+		\item Treatment is exogenous given pretreatment covariates
+		\item Mediator $M$ is exogenous given pre and post treatment covariates. 
+		\item There is no interaction between treatment and mediator (i.e. the causal effect of the mediator on the outcome does not depend on treatment status).
+	\end{itemize}
+	~\\
+	However, the assumption of no treatment-mediator interaction is often too strong. For example, in framing experiments the effect of an issue on opinions may depend on initial framing. We can thus relax the key identification assumption by developing sensitivity analysis. The key contribution here is thus sensitivity analysis to posttreatment confounders. 
+	\\~\\
+	A limitation of the approach is that it still hinges on an untestable assumption of no unmeasured confounder for the mediator. Suggest an experimental approach to deal with this, but that won't be relevant for observational studies. 
+	\\~\\
+	\textbf{Three motivating examples.} All to do with framing effects - can the framing of issues in mass media and elite communication affect citizens' political opinion and behaviour? In all cases there are multiple causal mechanisms that are independent of one another. 
+	\begin{enumerate}
+		\item Campaign Finance Reform Experiment: importance mechanism or content mechanism. 
+		\item Social Welfare Reform Experiment: importance and content of the issue.
+		\item Immigration Experiment: perceived harm mechanism or anxiety mechanism
+	\end{enumerate}
+	~\\
+	In general mediation analysis usually involves fitting two linear regressions separately:
+	$$
+	M_i = \alpha_2 + \beta_2 T_i + \zeta_2 X_i + \epsilon_{i2}
+	$$
+	$$
+	Y_i = \alpha_3 + \beta_3 T_i + \gamma M_i +  \zeta_3 X_i + \epsilon_{i3}
+	$$
+	where $X_i$ represents pretreatment confounders. After fitting the two models the ACME is $\beta_2 \gamma$ and $\beta_3 $ is the ADE. Following Imai, Keele and Yamamoto (2010) this can be justified under sequential ignorability. Sequential ignorability requires that there is no posttreatment confounding between the mediator and the outcome. In my case it means that there is no confounding between trading volume and volatility. 
+	\\~\\
+	Sequential ignorability (part 2) can fail for two reasons:
+	\begin{enumerate}
+		\item Unobserved pretreatment confounding
+		\item Any posttreatment confounding
+	\end{enumerate}
+	So even if the mediator is exogenous after conditioning on a vector of posttreatment confounders ($W_i$) as well as $T_i$ and $X_i$ then sequential ignorability is violated and we can't identify the average mediation effect. Furthermore, the sensitivity analysis addresses the problem of potential unobserved pretreatment confounding, but it does not allow for the possibility of posttreatment confounding. 
+	\\~\\
+	Multiple mechanisms are by definition causally affected by the treatment and influence the outcome. If alternative mediators affect the mediator of interest, then it is easy to see that this violates sequential ignorability. 
+	\\~\\
+	We thus have two types of causal mediation effects - with respect to $M$ and $W$. 
+	\\~\\
+	Generalise the sequential ignorability assumption with multiple causally independent mediators. There are now three parts to the sequential ignorability assumption. 
+	\begin{enumerate}
+		\item The outcome and mediators are independent of treatment, conditional on pretreatment covariates 
+		$$
+		Y_i(t,m,w), M_i(t'), W_i(t'') \indep T_i | X_i = x
+		$$
+		\item The outcome and the alternative mediator are independent of the primary mediator, conditional on treatment and pretreatment covariates
+		$$
+		Y_i(t', m, W_i(t')) \indep M_i | T_i =t, X_i = x
+		$$
+		\item The outcome and primary mediator are independent of the alternative mediator, given the treatment and pretreatment covariates
+		$$
+		Y_i(t', m, M_i(t')) \indep W_i | T_i =t, X_i = x
+		$$
+	\end{enumerate}
+	The standard analysis of multiple mediators in many social science applications relies implicitly on the is strong sequential ignorability assumption. 
+	
+	
+	\subsection{Multiple Causal Mechanisms}
+	
+	Introduce potential values of $W$, where $W_i$ is a posttreatment variable and so possibly affected by the treatment. If there is no causal relationship between $M_i$ and $W_i$, then everything is fine. 
+	\\~\\
+	Here focus on cases where other mediators $W$ confound the relationship between $M$ and $Y$, so $M$ is exogenous conditional of $X$, $T$ and $W$.  $M$ is causally affected by a set of alternative mediators $W$. 
+	\\~\\
+	The mediated effect $\delta_i(t)$ is the causal effect of the treatment that transmits through the mediator of interest $M$. 
+	\\~\\
+	\textbf{Sequential Ignorability with Multiple Causally Dependent Mediators}.
+	Assumption has three parts:
+	\begin{enumerate}
+		\item The outcome and both mediators are random wrt treatment, conditional on $X$. 
+		$$
+		Y_i(t,m,w), M_i(t,w), W_i(t) \indep T_i | X_i = x
+		$$
+		\item The outcome and the primary mediator are independent of the alternative mediator, conditional on treatment and $X$
+		$$
+		Y_i(t,m,w), M_i(t,w) \indep W_i(t) | T_i =t, X_i = x
+		$$
+		\item The outcome is independent of the primary mediator, conditional on alternate mediator, treatment and $X$
+		$$
+		Y_i(t,m,w) \indep M_i(t,w) | W_i(t) =w, T_i =t, X_i = x
+		$$
+	\end{enumerate}
+	So this assumes that there may be a causal effect of $W$ through $M$, but not of $M$ through $W$. 
+	\\~\\
+	But, as shown by Robins (2003) we need an additional assumption of no treatment-mediator interaction for the ACME to be identified. 
+	$$
+	Y_i(1, m, W_i(1)) - Y_i(0,m,W_i(0)) = Y_i(1, m', W_i(1)) - Y_i(0,m',W_i(0))
+	$$
+	for any $m$, $m'$. SO I think this is saying that the effect of $W$ on $Y$ must be independent of $M$. 
+	\\~\\
+	It looks like they're arguing you can relax the no interaction assumption and just rely on the three part sequential ignorability assumption. 
+	$$
+	M_i(t,w) = \alpha_2 + \beta_{2i} t + \zeta_{2,i}w + \mu_{2i} t  w + \lambda_{2i} x + \epsilon_{2i}
+	$$
+	$$
+	Y_i(t,m,w) = \alpha_3 + \beta_{3i} t + \gamma_i m + \kappa_i t m + \zeta_{3,i} w + \mu_{3i} t  w + \lambda_{3i} x + \epsilon_{3i}
+	$$
+	This reflects the situation in Figure (b). Specifically, $M$ depends on a set of alternative mediators $W$ which is possibly affected bu the treatment as well as the treatment $T$. 
+	
+	
+	
+	
+	
+	 
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	
 	
@@ -245,6 +454,8 @@
 	The sequential ignorability assumption then that (i) media coverage is random once we adjust for differences in past performance, implied volatility and firm/time specific factors; (ii) trading volume is random once taking into account differences in media coverage, past performance, implied volatility and firm/time specific factors. 
 	\\~\\
 	For sequential ignorability to imply identification of the ACME, we can only condition on pre-treatment variables. We cannot condition on pre-mediator confounders if they are affected by the treatment. So, for example, we cannot condition Volume on intra-day return if return is also affected by the media coverage.
+	\\~\\
+	The sensitivity analysis in this context would involve a confounder that is correlated with the volatility and volume errors. So for example if there is some anticipated information event that drives both volatility and volume then the errors would be positively correlated. So we can test how strong this correlation needs to be for the effect to disappear. 
 	\\~\\
 	If there are multiple causal relationships then sequential ignorability is satisfied only if the two mediators are causally unrelated. In our case this would mean that return magnitude and Volume are causally unrelated. 
 	\\~\\
@@ -287,5 +498,6 @@
 	\end{table} 
 	~\\
 	\textbf{On anticipating high volatility.} It is to some extent an open question whether the media \textit{causes} volatility or whether it is very good at anticipating it. However, by controlling for implied volatility, we do get an indication that if the media is anticipating volatility it is more adept at doing so than financial markets are.    
+	\
 	
 \end{document}

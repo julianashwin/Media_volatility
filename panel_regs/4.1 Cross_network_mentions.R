@@ -1,4 +1,4 @@
-setwd("~/Documents/GitHub/Firm_level_news_analysis")
+setwd("~/Documents/GitHub/Media_volatility")
 rm(list = ls())
 require(plm)
 require(ggplot2)
@@ -47,8 +47,8 @@ all(all_sectors %in% matrix_labels$x)
 
 test <- felm(highlow ~ mention | Code + Date, data = all_data)
 summary(test)
-test <- felm(highlow ~ mention + abs_intra_day + plm::lag(highlow, 1:10) + 
-               VI_put + VI_call | Code + Date, data = all_data)
+test <- felm(highlow ~ mention + plm::lag(highlow, 1:10) + 
+               plm::lag(VI_put,1:10) + plm::lag(VI_call,1:10) | Code + Date, data = all_data)
 summary(test)
 
 
@@ -274,8 +274,6 @@ weighted_mention_avg_df <- pdata.frame(data.frame(weighted_mention_avg), index =
 
 
 
-# Run some regressions
-
 # Baseline
 model1 <- felm(highlow ~ mention + abs_intra_day + VI_put + VI_call +  
                  plm::lag(highlow, 1:10) | Code + Date, data = weighted_mention_avg_df)
@@ -321,13 +319,23 @@ model8 <- felm(highlow ~ mention
                data = weighted_mention_avg_df)
 summary(model8) 
 
+ggplot() + geom_density(aes(x=weighted_mention_avg_df$placebo_weighted_mention_avg ))
 
 stargazer(model1, model4, model5, model6, model8, df = FALSE,
           title = "Spillover effect of media coverage with article variable", 
           table.placement = "H")
 
+write.csv(weighted_mention_avg_df, str_c(clean_dir, "/FT/matched/weighted_mention_avg_full.csv"),
+          row.names = F)
 
+weighted_mentions_short <- as_tibble(weighted_mention_avg_df) %>%
+  select(Code, Date, Sector, N_sector, own_sec_mention, own_sec_mention_avg,
+         own_sec_mention_notme, own_sec_mention_avg_notme,
+         own_sec_highlow, own_sec_highlow_notme,cons_weighted_mention_avg,
+         dem_weighted_mention_avg, placebo_weighted_mention_avg)
 
+write.csv(weighted_mentions_short, str_c(clean_dir, "/FT/matched/weighted_mention_avg.csv"),
+          row.names = F)
 
 
 model1 <- felm(highlow ~ mention + placebo_weighted_mention_avg + plm::lag(highlow, 1:10) | 

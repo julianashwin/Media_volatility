@@ -11,6 +11,8 @@ require(fixest)
 require(lubridate)
 require(DoubleML)
 library(mediation)
+library(DescTools)
+library(tidyverse)
 
 
 felm_DK_se <- function(reg_formula, df_panel){
@@ -27,631 +29,938 @@ felm_DK_se <- function(reg_formula, df_panel){
   return(model_felm)
 }
 
+get_quantile <- function(x, qnt, as_numeric = TRUE){
+  
+  x_qnts <- cut(x, breaks = Quantile(x, probs = seq(0,1,1/qnt), na.rm = T),
+                labels = 1:qnt, include.lowest = TRUE)
+  if (as_numeric){
+    x_qnts <- as.numeric(x_qnts)
+  }
+  return(x_qnts)
+}
+
+
 # Import the panel data
 clean_dir <- "~/Documents/DPhil/Clean_Data"
 import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
 total_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
+total_data <- total_data %>%
+  mutate(earnings_count = str_count(text, "earnings")) 
+  
+as_tibble(total_data) %>%
+  filter(text != "") %>% 
+  dplyr::select(Code, Date, text) %>%
+  mutate(report_count = str_count(text, "earnings")) %>%
+  ggplot(aes(x = report_count)) + theme_bw() + geom_histogram()
 
-panel_df <- pdata.frame(total_data, index = c("Code", "period"))
-panel_df <- data.frame(panel_df[,which(!str_detect(names(panel_df), "text"))])
+as_tibble(total_data) %>%
+  filter(Code == "MCRO.L") %>%
+  mutate(Date = as.Date(Date)) %>%
+  ggplot(aes(x = Date, y = Close)) + theme_bw() + 
+  geom_line() + 
+  geom_vline(data = filter(total_data, mention == 1 & Code == "MCRO.L"),
+             aes(xintercept=as.Date(Date)), color = "blue", linetype = "dashed") +
+  labs(y = "MCRO Price")
+ggsave("figures/MCRO_price_mentions.pdf", width = 6, height = 2.5)
+
+
+
+
+"
+First look
+"
+model1 <- felm_DK_se(highlow ~ mention, total_data)
+model2 <- felm_DK_se(highlow ~ mention | Code, total_data)
+model3 <- felm_DK_se(highlow ~ mention | Code + period, total_data)
+model4 <- felm_DK_se(highlow ~ mention + highlow_1lag | Code + period, total_data)
+model5 <- felm_DK_se(highlow ~ mention + highlow_1lag + abs_overnight | Code + period, total_data)
+model6 <- felm_DK_se(highlow ~ mention + highlow_1lag + abs_overnight + 
+                       VI_put_1lag + VI_call_1lag| Code + period, total_data)
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F)
+
+
+
+"
+Various controls
+"
+persist_coefs <- data.frame(model = c("Baseline", "LR + volatility lags", "LR + volatility, volume and return lags", 
+                                      "LR + volatility, volume and return lags + implied volatility",
+                                      "LR + volatility, volume and return lags + implied volatility + realised return",
+                                      "RF + volatility, volume and return lags + implied volatility",
+                                      "RF + volatility, volume and return lags + implied volatility + realised return"), 
+                            coef = 0, se = 0)
+
+persist_coefs$model_factor <- factor(persist_coefs$model, ordered = T,
+                                    levels <- c("Baseline", "LR + volatility lags", "LR + volatility, volume and return lags", 
+                                                "LR + volatility, volume and return lags + implied volatility",
+                                                "LR + volatility, volume and return lags + implied volatility + realised return",
+                                                "RF + volatility, volume and return lags + implied volatility",
+                                                "RF + volatility, volume and return lags + implied volatility + realised return"))
+
+
+## Baseline model
+model1 <- felm_DK_se(highlow ~ mention + abs_overnight + 
+                       highlow_1lag | Code + period, total_data)
+persist_coefs$coef[which(persist_coefs$model == "Baseline")] <- summary(model1)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "Baseline")] <- summary(model1)$coefficients["mention","Std. Error"]
+
+## More highlow lags
+model2 <- felm_DK_se(highlow ~ mention  + abs_overnight + 
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag
+                     |Code + period, total_data)
+persist_coefs$coef[which(persist_coefs$model == "LR + volatility lags")] <- summary(model2)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "LR + volatility lags")] <- summary(model2)$coefficients["mention","Std. Error"]
+
+## More price movement lags
+model3 <- felm_DK_se(highlow ~ mention + abs_overnight + 
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+persist_coefs$coef[which(persist_coefs$model == "LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Std. Error"]
+
+## Implied volatility lags
+model4 <- felm_DK_se(highlow ~ mention + abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+persist_coefs$coef[which(persist_coefs$model == "LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Std. Error"]
+
+
+## Realised returns
+model5 <- felm_DK_se(highlow ~ mention + abs_overnight + abs_intra_day +
+                     VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+persist_coefs$coef[which(persist_coefs$model == 
+                           "LR + volatility, volume and return lags + implied volatility + realised return")] <- 
+  summary(model5)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == 
+                         "LR + volatility, volume and return lags + implied volatility + realised return")] <- 
+  summary(model5)$coefficients["mention","Std. Error"]
+
+DoubleML_effects <- read.csv("figures/DoubleML_effects.csv")
+
+
+## Random forest 
+persist_coefs$coef[which(persist_coefs$model == 
+                           "RF + volatility, volume and return lags + implied volatility")] <- 0.16793
+persist_coefs$se[which(persist_coefs$model == 
+                         "RF + volatility, volume and return lags + implied volatility")] <- 0.02209
+
+## Random forest with realised returns
+persist_coefs$coef[which(persist_coefs$model == 
+                           "RF + volatility, volume and return lags + implied volatility + realised return")] <- 0.14254
+persist_coefs$se[which(persist_coefs$model == 
+                         "RF + volatility, volume and return lags + implied volatility + realised return")] <- 0.01946 
+
+
+
+
+ggplot(persist_coefs, aes(y=fct_rev(model_factor), x=coef)) + theme_bw() + 
+  geom_point(shape=21, size=3, fill="white") +
+  geom_errorbar(width=.1, aes(xmin=coef-1.96*se, xmax=coef+1.96*se)) + 
+  geom_vline(aes(xintercept = 0), linetype = "dashed") +
+  labs(y = "Model", x = "FT article effect")
+
+ggsave("figures/effect_controls.pdf", width = 8, height = 2.5)
+
+
+## Import the DoubleML effects. For some reason get different results doing manually than with the DOubleML package?
+## Gonna go with the DoubleML package for now...
+DoubleML_effects <- read.csv("figures/DoubleML_effects.csv")
+DoubleML_keep  <- DoubleML_effects %>%
+  rename(coef = rf_reg_coef, se = rf_reg_se) %>%
+  select(model, coef, se) %>%
+  mutate(coef = round(coef, 3), se = round(se,))
+DoubleML_keep
+
+
+
+"
+Forward looking and persistence experiments variables
+"
+## Import the LIWC dictionaries
+import_filename = paste(clean_dir, "FT/matched/LIWC_2015_Results_short_articles.csv", sep = "/")
+LIWC_data <- read.csv(import_filename, stringsAsFactors = FALSE) %>%
+  dplyr::select(-highlow, - article_id, -headline, -short_text, -obs_id, -clean_text)
+
+merge_data <- as_tibble(total_data) %>%
+  left_join(LIWC_data, by = c("Code", "Date")) %>%
+  mutate_at(names(LIWC_data)[3:ncol(LIWC_data)], ~replace_na(.,0)) %>%
+  group_by(Code) %>%
+  mutate(mention_1lead = dplyr::lead(mention, n = 1, order_by = period))
+  
+
+
+model1 <- felm_DK_se(highlow ~ mention + abs_overnight + 
+                      VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                      VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                      highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                      highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                      lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                      lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                      abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                      abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                      return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                      return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                    |Code + period, merge_data)
+
+model2 <- felm_DK_se(highlow ~ mention + focusfuture + focuspast + 
+                      abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+
+model3 <- felm_DK_se(highlow ~ mention*Monday-Monday + focusfuture + focuspast + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+
+model4 <- felm_DK_se(highlow ~ mention*Monday-Monday + mention*mention_1lead + focusfuture + focuspast + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+
+summary(model4)
+
+stargazer(model1, model2, model3, model4,
+          table.placement = "H", df = F)
+
+
+
+
+"
+Controlling for specific text features
+"
+
+merge_data %>%
+  filter(mention == 1) %>%
+  ggplot() + theme_bw() + 
+  geom_density(aes(x = LM_sentiment))
+
+merge_data$neg_sentiment <- as.numeric(merge_data$LM_sentiment < 0)
+merge_data$pos_sentiment <- as.numeric(merge_data$LM_sentiment > 0)
+merge_data$earnings <- as.numeric(merge_data$earnings != 0)
+
+model1 <- felm_DK_se(highlow ~ mention + LM_sentiment + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+model2 <- felm_DK_se(highlow ~ pos_sentiment + neg_sentiment +
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+model3 <- felm_DK_se(return ~ LM_sentiment + 
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+model4 <- felm_DK_se(overnight ~ LM_sentiment + 
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+model5 <- felm_DK_se(intra_day ~ LM_sentiment +
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+summary(model5)
+
+
+stargazer(model1, model2, model3, model4, model5,
+          table.placement = "H", df = F)
+
+
+
+
 
 
 "
 Time varying effect
 "
 med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
-model_df <- panel_df[complete.cases(panel_df[,med_vars]),]
+model_df <- total_data[complete.cases(total_data[,med_vars]), which(!str_detect(names(total_data), "text"))]
 model <- summary(feols(highlow ~ mention*as.factor(year)-mention-as.factor(year) + 
-                         highlow_1lag + VI_put|Code + period, model_df), vcov = DK ~ period)
+                         highlow_1lag + VI_put_1lag|Code + period, model_df), vcov = DK ~ period)
 coef_table <- data.frame(model$coeftable)
 coef_table$year <- rownames(coef_table)
-coef_table <- coef_table[which(!(coef_table$year %in% c("highlow_1lag", "VI_put"))),]
+coef_table <- coef_table[which(!(coef_table$year %in% c("highlow_1lag", "VI_put_1lag"))),]
 coef_table$year <- as.numeric(str_remove(coef_table$year, "mention:as\\.factor\\(year\\)"))
 
 ggplot(coef_table, aes(x = year)) + theme_bw() + 
-  geom_ribbon(aes(ymax = Estimate + 1.96*abs(Std..Error), ymin = Estimate - 1.96*abs(Std..Error)), alpha = 0.3) +
+  geom_ribbon(aes(ymax = Estimate + 1.96*abs(Std..Error), ymin = Estimate - 1.96*abs(Std..Error)), alpha = 0.2) +
   geom_line(aes( y = Estimate)) + 
-  geom_hline(aes(yintercept = 0), linetype = "dashed")
+  geom_hline(aes(yintercept = 0), linetype = "dashed") + 
+  labs(x = "Year", y = "FT article effect")
+ggsave("figures/effect_year.pdf", width = 6, height = 2.5)
+
+
+
+
+
+"
+Persistence of effect 
+"
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
+model_df <- total_data[complete.cases(total_data[,med_vars]), which(!str_detect(names(total_data), "text"))]
+model_df <- model_df %>% 
+  group_by(Code) %>%
+  mutate(highlow_1lead = dplyr::lead(highlow, n = 1, order_by = period)) %>%
+  mutate(highlow_2lead = dplyr::lead(highlow, n = 2, order_by = period)) %>%
+  mutate(highlow_3lead = dplyr::lead(highlow, n = 3, order_by = period)) %>%
+  mutate(highlow_4lead = dplyr::lead(highlow, n = 4, order_by = period))
+  relocate(highlow, highlow_1lead, .after = Open)
+model <- summary(feols(highlow ~ mention + abs_overnight +
+                         VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                         VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                         highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                         highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                         lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                         lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                         abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                         abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                         return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                         return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                       |Code + period, model_df), vcov = DK ~ period)
+model_1lead <- summary(feols(highlow_1lead ~ mention + abs_overnight +
+                               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                       |Code + period, model_df), vcov = DK ~ period)
+model_2lead <- summary(feols(highlow_2lead ~ mention + abs_overnight +
+                               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                             |Code + period, model_df), vcov = DK ~ period)
+model_3lead <- summary(feols(highlow_3lead ~ mention + abs_overnight +
+                               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                             |Code + period, model_df), vcov = DK ~ period)
+model_4lead <- summary(feols(highlow_4lead ~ mention + abs_overnight +
+                               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                             |Code + period, model_df), vcov = DK ~ period)
+
+coef_table <- data.frame(lead = 0:10, coef = 0, se = 0)
+coef_table$coef[coef_table$lead == 0] <- model$coefficients["mention"]
+coef_table$se[coef_table$lead == 0] <- model$se["mention"]
+coef_table$coef[coef_table$lead == 1] <- model_1lead$coefficients["mention"]
+coef_table$se[coef_table$lead == 1] <- model_1lead$se["mention"]
+coef_table$coef[coef_table$lead == 2] <- model_2lead$coefficients["mention"]
+coef_table$se[coef_table$lead == 2] <- model_2lead$se["mention"]
+coef_table$coef[coef_table$lead == 3] <- model_3lead$coefficients["mention"]
+coef_table$se[coef_table$lead == 3] <- model_3lead$se["mention"]
+coef_table$coef[coef_table$lead == 4] <- model_4lead$coefficients["mention"]
+coef_table$se[coef_table$lead == 4] <- model_4lead$se["mention"]
+
+coef_table %>%
+  ggplot(aes(x = lead)) + theme_bw() + 
+  geom_ribbon(aes(ymax = coef + 1.96*abs(se), ymin = coef - 1.96*abs(se)), alpha = 0.2) +
+  geom_line(aes( y = coef)) + 
+  geom_hline(aes(yintercept = 0), linetype = "dashed") + 
+  labs(y = "FT article effect", x = "Days since article")
   
+ggsave("figures/effect_persistence.pdf", width = 4, height = 3)
+
+
+
+"
+Firm heterogeneity effect
+"
+model_eachfirm <- summary(feols(highlow ~ mention*as.factor(Code)-mention-as.factor(Code) + 
+                         abs_overnight +
+                         VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                         VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                         highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                         highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                         lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                         lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                         abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                         abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                         return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                         return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                       |Code + period, total_data), vcov = DK ~ period)
+coefs <- summary(model_eachfirm)$coefficients
+mention_effects <- coefs[str_detect(names(coefs), "mention:as.factor")]
+mean(mention_effects)
+hist(mention_effects)
+
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
+model_df <- total_data[complete.cases(total_data[,med_vars]), which(!str_detect(names(total_data), "text"))]
+model_df <- model_df %>%
+  group_by(period) %>%
+  filter(n() > 4) %>%
+  mutate(period_n = n()) %>%
+  mutate(lmarket_value_1lag_quart = get_quantile(lmarket_value_1lag, 4)) %>%
+  group_by(Code, year) %>%
+  mutate(firmyear_highlow = mean(highlow, na.rm= TRUE)) %>%
+  mutate(firmyear_lVolume = mean(lVolume, na.rm= TRUE)) %>%
+  group_by(year) %>%
+  mutate(highlow_quart = get_quantile(firmyear_highlow, 4)) %>%
+  mutate(lVolume_quart = get_quantile(firmyear_lVolume, 4)) %>%
+  ungroup()
+
+
+model1 <- felm_DK_se(highlow ~ mention*as.factor(lmarket_value_1lag_quart)-mention-as.factor(lmarket_value_1lag_quart) + 
+                         abs_overnight +
+                         VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                         VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                         highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                         highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                         lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                         lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                         abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                         abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                         return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                         return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                       |Code + period, model_df)
+model2 <- felm_DK_se(highlow ~ mention*as.factor(highlow_quart)-mention-as.factor(highlow_quart) + 
+                         abs_overnight +
+                         VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                         VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                         highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                         highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                         lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                         lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                         abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                         abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                         return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                         return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                       |Code + period, model_df)
+model3 <- felm_DK_se(highlow ~ mention*as.factor(lVolume_quart)-mention-as.factor(lVolume_quart) + 
+                          abs_overnight +
+                          VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                          VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                          highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                          highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                          lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                          lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                          abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                          abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                          return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                          return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                        |Code + period, model_df)
+stargazer(model1, model2, model3, 
+          table.placement = "H", df = F)
+
+
+
+
+
+
+
+
+
 
 
 "
 Mediation effect
 mention -> lVolume -> highlow
 "
-med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
-model_df <- panel_df[complete.cases(panel_df[,med_vars]),]
-
-model_df$firm_highlow <- ave(model_df$highlow, model_df$Code)
-model_df$time_highlow <- ave(model_df$highlow, model_df$Date)
-model_df$firm_lVolume <- ave(model_df$lVolume, model_df$Code, FUN = mean)
-model_df$time_lVolume <- ave(model_df$lVolume, model_df$Date, FUN = mean)
-model_df$firmyear_highlow <- ave(model_df$highlow, model_df$Code, model_df$year, FUN = mean)
-model_df$firmyear_lVolume <- ave(model_df$lVolume, model_df$Code, model_df$year, FUN = mean)
-model_df$lVolume_diff <- model_df$lVolume - model_df$lVolume_1lag
-model_df$lVolume_excess <- model_df$lVolume - model_df$firmyear_lVolume
-
-
-df_agg <- aggregate(model_df[,c("mention", "highlow", "lVolume")], 
-                    by = list(firm = model_df$Code), FUN = mean)
-cor.test(df_agg$mention, df_agg$lVolume)
-
-
-summary(lm(return ~ mention, model_df))
-
-## Total effect
-fit.totaleffect <- felm_DK_se(highlow ~ mention + abs_overnight +
-                          Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                          lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
-                          VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                          abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
-                          abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                          return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
-                        | Code + period, model_df)
-summary(fit.totaleffect)
-# Mediator model 
-fit.mediator <- felm_DK_se(lVolume ~ mention + abs_overnight +
-                       Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
-                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                       abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
-                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
-                     | Code + Date, model_df)
-summary(fit.mediator)
-# Control for mediator on outcome
-fit.dv <- felm_DK_se(highlow ~ mention + abs_overnight + abs_intra_day + lVolume +
-                                Code*highlow_1lag-Code + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                                lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+## Baseline model
+model1 <- felm_DK_se(highlow ~ mention + 
+                                abs_overnight +
                                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                                abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+                                VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                                highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                                highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                                lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                                lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
                                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                                return_1lag + return_2lag + return_3lag + return_4lag + return_5lag
-                              | Code + period, model_df)
-summary(fit.dv)
+                                abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                                return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                                return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                              | Code + period, total_data)
+## lVolume model
+model2 <- felm_DK_se(lVolume ~ mention +
+                             abs_overnight +
+                             VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                             VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                             highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                             highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                             lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                             lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                             abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                             abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                             return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                             return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                           | Code + period, total_data)
+model3 <- felm_DK_se(abs_intra_day ~ mention +
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     | Code + period, total_data)
+model4 <- felm_DK_se(highlow ~ mention + abs_intra_day + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+model5 <- felm_DK_se(highlow ~ mention + lVolume + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+model6 <- felm_DK_se(highlow ~ mention + abs_intra_day +  lVolume + 
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, total_data)
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F)
+
+
+summary(model5)
+total_effect <- model1$coefficients["mention",]
+Volume_acme <- model2$coefficients["mention",]*model5$coefficients["lVolume",]
+return_acme <- model3$coefficients["mention",]*model4$coefficients["abs_intra_day",]
+Volume_direct_effect <- model5$coefficients["mention",]
+return_direct_effect <- model4$coefficients["mention",]
+
+Volume_acme/total_effect
+return_acme/total_effect
 
 
 
-## Step 1: identify the total effect (X on Y)
-fit.totaleffect <- lm(highlow ~ mention + highlow_1lag + lVolume_1lag + VI_put + 
-                        Code + time_highlow + time_lVolume, model_df)
-summary(fit.totaleffect)
-fit.totaleffect <- lm(highlow ~ mention + highlow_1lag + lVolume_1lag + 
-                        firm_highlow + time_highlow, model_df)
-summary(fit.totaleffect)
 
 
-## Step 2: effect of independent variable on the mediator (X on Z)
-# Must be significant
-# Can include covariates here
-fit.mediator <- lm(lVolume ~ mention + highlow_1lag + lVolume_1lag + VI_put + 
-                     Code + time_highlow + time_lVolume, model_df)
-summary(fit.mediator)
-fit.mediator <- lm(lVolume ~ mention + highlow_1lag + lVolume_1lag + 
-                     firm_highlow + time_highlow, model_df)
-summary(fit.mediator)
+"
+Spillover effects
+"
 
-## Step 3: effect of the mediator on the dependent variable (Z on Y)
-# Control for independent variable!
-fit.dv <- felm(highlow ~ mention  + lVolume + abs_intra_day +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag + 
+weighted_mentions_short <- read.csv(str_c(clean_dir, "/FT/matched/weighted_mention_avg.csv"))
+
+model_df <- total_data %>%
+  left_join(weighted_mentions_short, by = c("Code", "Date", "Sector"))
+
+# Baseline
+model1 <- felm(highlow ~ mention + 
+                 abs_overnight + 
                  VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag
-               | Code + Date, model_df)
-summary(fit.dv)
-fit.dv <- lm(highlow ~ mention + lVolume + highlow_1lag + lVolume_1lag + VI_put + 
-               Code, model_df)
-summary(fit.dv)
-fit.dv <- lm(highlow ~ mention + lVolume + highlow_1lag + lVolume_1lag + 
-               firm_highlow + time_highlow, model_df)
-summary(fit.dv)
-
-
-## Step 4: Causal mediation analysis that estimates and combines models
-total_effect <- fit.totaleffect$coefficients["mention",]
-acme <- fit.mediator$coefficients["mention",]*fit.dv$coefficients["abs_intra_day",]
-acme/total_effect
-total_effect <- fit.totaleffect$coefficients["mention",]
-acme <- fit.mediator$coefficients["mention",]*fit.dv$coefficients["lVolume",]
-acme/total_effect
-
-
-fit.mediator$coefficients["mention"]
-
-results <- mediate(fit.mediator, fit.dv, treat = "mention", mediator = "lVolume", boot = T, sims = 50)
-                  #,covariates = c("highlow_1lag","lVolume_1lag","VI_put","Code","time_highlow","time_lVolume"))
-summary(results)
-plot(results)
-
-
-Xnames <- c("highlow_1lag", "lVolume_1lag", "firm_highlow", "time_highlow")
-m.med <- multimed(outcome = "highlow", med.main = "lVolume", 
-                  med.alt = "abs_intra_day", treat = "mention", 
-                  covariates = Xnames, data = model_df, sims = 25)
-summary(m.med)
-
-
-
-
-## Step 2b: effect of independent variable on the mediator (X on Z)
-# Must be significant
-# Can include covariates here
-fit.mediatorb <- felm(abs_intra_day ~ mention + highlow_1lag + VI_put | Code + Date, model_df)
-summary(fit.mediatorb)
-
-## Step 3b: effect of the mediator on the dependent variable (Z on Y)
-# Control for independent variable!
-fit.dvb <- felm(highlow~mention + abs_intra_day + highlow_1lag + VI_put | Code + Date, model_df)
-summary(fit.dvb)
-
-
-
-
-panel_df$lVol_m_firmyear <- panel_df$lVolume - panel_df$firm_lVolume
-summary(feols(highlow ~ mention + highlow_1lag + lVol_m_firmyear |Code + Date, panel_df))
-
-summary(lm(log(mean_Volume) ~ weekday, plot_df))
-
-summary(feols(highlow ~ mention*year_period |Code, panel_df))
-summary(feols(highlow ~ mention + log(Volume) |Code, total_data))
-summary(feols(highlow ~ mention + log(Volume) + Volume_logdiff |Code, total_data))
-summary(felm(highlow ~ mention + period|Code+Date|0|Code+Date, total_data))
-
-summary(felm(highlow ~ mention*as.factor(year_period)-as.factor(year_period)|Code + Date, total_data))
-
-model <- feols(highlow ~ mention*as.factor(year_period)-as.factor(year_period)|Code + Date, total_data)
-
-
-model1 <- feols(highlow ~ log(Volume) + highlow_1lag|Code+Date, 
-                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$mention)),])
-model2 <- feols(mention ~ log(Volume) + highlow_1lag|Code+Date, 
-                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$mention)),])
-summary(lm(model1$residuals ~ model2$residuals))
-
-model1 <- feols(highlow ~ log(Volume) + highlow_1lag|Code+Date, 
-                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$highlow_1lag)),])
-model2 <- feols(mention ~ log(Volume)|Code+Date, 
-                panel_df[which(!is.na(panel_df$highlow) & !is.na(panel_df$highlow_1lag)),])
-
-summary(lm(model1$residuals ~ model2$residuals))
-
-
-model <- feols(log(Volume) ~ mention + log(Volume_1lag)  + log(Volume_2lag) + log(Volume_3lag) +
-                 highlow_1lag + highlow_2lag + highlow_3lag + 
-                 abs_intra_day + VI_put + VI_call
-               |Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-
-
-model <- feols(highlow ~ mention + log(Volume) + highlow_1lag|Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-model <- feols(log(Volume) ~ mention + log(Volume_1lag)|Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-
-model <- feols(highlow ~  mention + log(Volume) + 
-                 highlow_1lag + 
-                 log(Volume_1lag) + log(Volume_2lag) |Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-model <- feols(highlow ~  mention + 
-                 highlow_1lag + VI_put + 
-                 log(Volume_1lag) + log(Volume_2lag) |Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-
-model <- feols(Volume_logdiff ~  mention , panel_df)
-summary(model, vcov = DK ~ period)
-
-model <- feols(highlow ~ mention + abs_intra_day + 
-                 VI_put + VI_put_1lag + highlow_1lag|Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-
-model <- feols(VI_put ~ VI_put_1lag |Code+Date, panel_df)
-summary(model, vcov = DK ~ period)
-
-summary(felm(log(Volume) ~ mention + highlow + highlow_1lag|Code+Date|0|Code+Date, total_data))
-
-summary(felm(highlow ~ mention + highlow_1lag|Code+Date|0|Code+Date, total_data))
-
-summary(felm(highlow ~ mention + highlow_1lag+ VI_put + VI_call|Code+Date|0|Code+Date, total_data))
-
-model <- feols(highlow ~ mention 
-               + highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
-               + abs_intra_day + VI_put + VI_call|Code+Date, total_data)
-summary(model, vcov = "iid")
-summary(model, vcov = DK ~ Date)
-summary(model, vcov = NW ~ Code + Date)
-summary(model, vcov = "twoway")
-
-
-model <- feols(highlow ~ mention + log(Volume) + Volume + 
-               + highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag
-               + abs_intra_day + VI_put + VI_call|Code+Date, total_data)
-summary(model, vcov = "iid")
-summary(model, vcov = DK ~ Date)
-summary(model, vcov = NW ~ Code + Date)
-summary(model, vcov = "twoway")
-
-
-
-ggplot(panel_df) +
-  geom_density(aes(x = log(Volume)))
-ggplot(panel_df) +
-  geom_density(aes(x = Volume_logdiff))
-ggplot(total_data) +
-  geom_density(aes(x = log(Turnover)))
-ggplot(total_data) +
-  geom_density(aes(x = year_period))
-
-summary(felm(highlow ~ mention + highlow_1lag+ VI_put + VI_call + log(Volume) + log(Turnover)
-             |Code+Date|0|Code+Date, total_data))
-
-# Add an abspChange for robustness
-total_data$pChange <- total_data$pChange*100
-total_data$abspChange <- abs(total_data$pChange)
-total_data$abs_open_open <- abs((total_data$Open - plm::lag(total_data$Open))/(total_data$Open))
-
-# Add a High-Low measure to look explicitly at volatility
-total_data$highlow = 100*(total_data$High - total_data$Low)/total_data$High
-total_data$highlow_close = 100*(total_data$High - total_data$Low)/total_data$Close
-total_data$highlow_ln = 100*(log(total_data$High) - log(total_data$Low))
-
-total_data$Index_High <- as.numeric(str_replace_all(total_data$Index_High, ",",""))
-total_data$Index_Low <- as.numeric(str_replace_all(total_data$Index_Low, ",",""))
-
-
-total_data$IndexHighLow <- 100*(total_data$Index_High - total_data$Index_Low)/total_data$Index_High
-
-
-# Correct a few data errors when time: some negative high-low, as some fields are mixed up 
-# sometimes the high is swapped with low or turnover.
-
-
-
-
-
-
-### Some initial plots
-figure_location <- "~/Documents/DPhil/Firm_level_news/figures"
-
-# Plot the daily percentage change in price
-ggplot(total_data, aes(highlow)) + geom_density(kernel = "gaussian") +
-  labs(y = "Density", x= "Daily Percentage Change")
-export_filename = paste(figure_location, "daily_equity_highlow.png", sep = "/")
-ggsave(export_filename, width = 8, height = 4, dpi = 200)
-
-
-
-# Plot first difference of AAL price to show stationarity
-one_data <- data.frame(total_data[which(total_data$Code=="AAL.L"),])
-one_data$Date <- as.Date(one_data$Date)
-ggplot(one_data, aes(Date)) + geom_line(aes(y = highlow)) + 
-  labs(y = "AAL high-low price change (%)")
-export_filename = paste(figure_location, "AAL_highlow.png", sep = "/")
-ggsave(export_filename, width = 10, height = 4, dpi = 200)
-
-
-
-
-
-
-### First compare the pooling and fixed effects with absolute percentage close-to-close change
-model1 <- plm(highlow ~ ner_mention, data = total_data,
-                index = c("Code", "Date"), model = "pooling")
-summary(model1)
-model2 = plm(highlow ~ head_mention, data = total_data, 
-                index = c("Code", "Date"), model = "pooling")
-summary(model2)
-model3 <- plm(highlow_ln ~ mention, data = total_data,
-                     index = c("Code", "Date"), model = "pooling")
-summary(model3)
-model4 = plm(highlow ~ ner_mention, data = total_data, 
-                index = c("Code", "Date"), model = "within")
-summary(model4)
-model5 = plm(highlow ~ head_mention, data = total_data, 
-                index = c("Code", "Date"), model = "within")
-summary(model5)
-model6 = plm(highlow ~ mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model6)
-
-# Combine in table
-highlow_fixed_table <- stargazer(model1, model2, model3, model4, model5, model6,
-                                    table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                                    title = "High-to-low volatility and mention dummies")
-
-### Compare fixed and pooling for intraday
-model1 <- plm(abs_intra_day ~ ner_mention, data = total_data,
-              index = c("Code", "Date"), model = "pooling")
-summary(model1)
-model2 = plm(abs_intra_day ~ head_mention, data = total_data, 
-             index = c("Code", "Date"), model = "pooling")
-summary(model2)
-model3 <- plm(abs_intra_day ~ mention, data = total_data,
-              index = c("Code", "Date"), model = "pooling")
-summary(model3)
-model4 = plm(abs_intra_day ~ ner_mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model4)
-model5 = plm(abs_intra_day ~ head_mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model5)
-model6 = plm(abs_intra_day ~ mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model6)
-
-
-# Combine in table
-abs_intra_day_fixed_table <- stargazer(model1, model2, model3, model4, model5, model6,
-                                    table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                                    title = "Intra-day returns and mention dummies")
-
-
-
-
-### Compare fixed for intraday excluding large movements
-model1 <- plm(highlow ~ mention, data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model1)
-model2 = plm(highlow ~ mention, data = total_data[which(total_data$highlow < 50),], 
-             index = c("Code", "Date"), model = "within")
-summary(model2)
-model3 <- plm(highlow ~ mention, data = total_data[which(total_data$highlow < 20),],
-              index = c("Code", "Date"), model = "within")
-summary(model3)
-model4 = plm(highlow ~ mention, data = total_data[which(total_data$highlow < 8),], 
-             index = c("Code", "Date"), model = "within")
-summary(model4)
-model5 = plm(highlow ~ mention, data = total_data[which(total_data$highlow < 5),], 
-             index = c("Code", "Date"), model = "within")
-summary(model5)
-
-
-# Combine in table
-abs_intra_day_exclude_outliers_table <- stargazer(model1, model2, model3, model4, model5,
-                                       table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                                       title = "Intra-day returns and mention dummies without large movements",
-                                       column.labels = c("Full", "< 50", "< 20", "< 8", "< 5"))
-
-
-
-
-### Formal tests of whether the individual effects significant?
-plmtest(both_full_pool, effect = "individual", type = "honda")
-plmtest(both_full_pool, effect = "individual", type = "bp")
-
-
-
-
-
-### Various controls for abs_intra_day
-model1 <- plm(abs_intra_day ~ plm::lag(mention,0), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model1)
-model2 <- plm(abs_intra_day ~ plm::lag(mention,0) +
-                plm::lag(abs_open_open, 1:4), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model2)
-model3 <- plm(abs_intra_day ~ plm::lag(mention,0) +
-                plm::lag(abs_open_open, 1:10) + plm::lag(Index_abs_Change, 0:10), 
-              data = total_data, index = c("Code", "Date"), model = "within")
-summary(model3)
-model4 <- plm(abs_intra_day ~ plm::lag(mention,0) +
-                plm::lag(abs_open_open, 1:10) +  plm::lag(Index_abs_Change, 0:10) +
-                Monday + Tuesday + Wednesday + Thursday, data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model4)
-
-# And also for high-to-low volatility
-model5 <- plm(highlow ~ plm::lag(mention,0), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model5)
-model6 <- plm(highlow ~ plm::lag(mention,0) +
-                plm::lag(highlow, 1:4), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model6)
-model7 <- plm(highlow ~ plm::lag(mention,0) +
-                plm::lag(highlow, 1:4) + plm::lag(IndexHighLow, 0:4), 
-              data = total_data, index = c("Code", "Date"), model = "within")
-summary(model7)
-model8 <- plm(highlow ~ plm::lag(mention,0) +
-                plm::lag(highlow, 1:10) +  plm::lag(IndexHighLow, 0:10) +
-                Monday + Tuesday + Wednesday + Thursday, data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model8)
-
-# Combine in table
-abs_intra_day_controls_table <- stargazer(model1, model2, model3, model4, model5, model6, model7, model8,
-                                          table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                                          title = "Intra-day returns and mention dummies with controls")
-
-
-
-
-
-### Look at effects of including lags and leads 
-model1 <- plm(abs_intra_day ~ plm::lag(mention,0), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model1)
-model2 <- plm(abs_intra_day ~ plm::lag(mention,-5:5) , data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model2)
-model3 <- plm(abs_intra_day ~ plm::lag(mention,-5:5) +
-                plm::lag(highlow, 1:4) +  plm::lag(Index_abs_Change, 0:4) +
-                Monday + Tuesday + Wednesday + Thursday, 
-              data = total_data, index = c("Code", "Date"), model = "within")
-summary(model3)
-model4 <- plm(highlow ~ plm::lag(mention,0), data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model4)
-model5 <- plm(highlow ~ plm::lag(mention,-5:5) , data = total_data,
-              index = c("Code", "Date"), model = "within")
-summary(model5)
-model6 <- plm(highlow ~ plm::lag(mention,-5:5) +
-                plm::lag(highlow, 1:4) +  plm::lag(IndexHighLow, 0:4) +
-                Monday + Tuesday + Wednesday + Thursday, 
-              data = total_data, index = c("Code", "Date"), model = "within")
-summary(model6)
-
-
-abs_intra_day_lagsleads_table <- stargazer(model1, model2, model3, model4, model5, model6,
-                                       table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                                       title = "Lags and leads of the mention dummy")
-
-
-
-
-
-
-### Time effect robustness checks
-
-# Baseline
-model1 = plm(abs_intra_day ~  mention , data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model1)
-model2 = plm(highlow ~  mention , data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model2)
-
-# Time effect
-model3 = plm(abs_intra_day ~  mention , data = total_data, 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model3)
-model4 = plm(highlow ~  mention , data = total_data, 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model4)
-
-# Remove large movements to see if this restores effect
-model5 = plm(abs_intra_day ~  mention , data = total_data[which(total_data$abs_intra_day < 20),], 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model5) # Note that the time effect destroys the effect unless we exclude large movements???
-model6 = plm(highlow ~  mention , data = total_data[which(total_data$highlow < 20),], 
-             index = c("Code", "Date"), model = "within", effect = "time")
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, data = model_df)
+# Only cons
+model2 <- felm(highlow ~ mention + cons_weighted_mention_avg +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+# Only dem
+model3 <- felm(highlow ~ mention + dem_weighted_mention_avg +
+               abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+# Both
+model4 <- felm(highlow ~ mention +  dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+# Both plus own sector
+model5 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 own_sec_mention_avg_notme  +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+# Both, own sec mention and vol
+model6 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                 | Code + Date, 
+               data = model_df)
 summary(model6) 
 
-# Both
-model7 <- felm(formula = abs_intra_day ~ mention  | Code + Date, data = total_data)
-summary(model7)
-model8 <- felm(formula = highlow ~ mention | Code + Date, data = total_data)
-summary(model8)
-
-
-
-time_effect_table <- stargazer(model1, model3, model5, model7, model2, model4, model6, model8,
-                               table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                               title = "Firm and time fixed effects", font.size = "small")
-
-
-
-### Time effect robustness checks with lags
-
-# Baseline
-model1 = plm(abs_intra_day ~  mention + plm::lag(highlow, 1:10), data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model1)
-model2 = plm(highlow ~  mention + plm::lag(highlow, 1:10), data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model2)
-
-# Time effect
-model3 = plm(abs_intra_day ~  mention + plm::lag(highlow, 1:10), data = total_data, 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model3)
-model4 = plm(highlow ~  mention + plm::lag(highlow, 1:10), data = total_data, 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model4)
-
-# Remove large movements to see if this restores effect
-model5 = plm(abs_intra_day ~  mention + plm::lag(highlow, 1:10), data = total_data[which(total_data$abs_intra_day < 20),], 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model5) # Note that the time effect destroys the effect unless we exclude large movements???
-model6 = plm(highlow ~  mention + plm::lag(highlow, 1:10), data = total_data[which(total_data$highlow < 20),], 
-             index = c("Code", "Date"), model = "within", effect = "time")
-summary(model6) 
-
-# Both
-model7 <- felm(formula = abs_intra_day ~ mention + plm::lag(highlow, 1:10) | Code + Date, data = total_data)
-summary(model7)
-model8 <- felm(formula = highlow ~ mention + plm::lag(highlow, 1:10) | Code + Date, data = total_data)
-summary(model8)
-
-
-
-time_effect_table <- stargazer(model1, model3, model5, model7, model2, model4, model6, model8,
-                               table.placement = "H", df = FALSE, column.sep.width	= "2pt",
-                               title = "Firm and time fixed effects with lag controls", font.size = "small")
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F) 
 
 
 
 
 
-### Variable coefficient model robustness checks
+# Chuck in a placebo
+model1 <- felm(highlow ~ mention + placebo_weighted_mention_avg + 
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, data = model_df)
+summary(model1) 
+model2 <- felm(highlow ~ mention + placebo_weighted_mention_avg + 
+                 own_sec_mention_avg_notme + own_sec_highlow_notme +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, data = model_df)
+stargazer(model1, model2, table.placement = "H", df = F) 
 
-# Baseline
-model1 = plm(abs_intra_day ~  mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model1)
-# Variable coefficients
-model2 <- pvcm(abs_intra_day ~  plm::lag(mention,0), data = total_data, 
-               index = c("Code", "Date"), model = "within")
-summary(model2)
-# Baseline
-model3 = plm(highlow ~  mention, data = total_data, 
-             index = c("Code", "Date"), model = "within")
-summary(model3)
-# Variable coefficients
-model4 <- pvcm(highlow ~  plm::lag(mention,0), data = total_data, 
-               index = c("Code", "Date"), model = "within")
-summary(model4)
-
-
-
-
-
-# Plot the Variable Coefficient Model results for abs_intra_day
-coefficient_data <- model2$coefficients
-colnames(coefficient_data) <- c("Constant", "mention")
-# Remove outlier (CCL) and NAs
-coefficient_data <- subset(coefficient_data, !is.na(mention))
-
-# Reshape to plot all on same graph
-coefficient_data$id <- 1:nrow(coefficient_data)
-df.m <- melt(coefficient_data, "id")
-
-ggplot(data = df.m, aes(x=value)) + geom_density(aes(fill = "blue"),kernel = "gaussian") +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~variable) + theme(legend.position="none")  + 
-  labs(y = "Density", x = "Coefficient values") + ggtitle("Absolute intra-day change")
-figure_location <- "~/Documents/DPhil/Firm_level_news/figures"
-export_filename = paste(figure_location, "vcm_coeffs_absintraday.png", sep = "/")
-ggsave(export_filename, width = 8, height = 4, dpi = 200)
+# Without the abs_intra_day and VI
+model8 <- felm(highlow ~ mention 
+               + own_sec_mention_avg_notme + own_sec_highlow_notme
+               + dem_weighted_mention_avg + cons_weighted_mention_avg
+               + plm::lag(highlow, 1:10) | Code + Date, 
+               data = model_df)
+summary(model8) 
 
 
 
+"
+Spillovers to volume and returns
+"
+model1 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+model2 <- felm(lVolume ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                + own_sec_mention_avg_notme + own_sec_highlow_notme +
+                abs_overnight + 
+                VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+              | Code + Date, 
+              data = model_df)
+summary(model2) 
+model3 <- felm(abs_intra_day ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+model4 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme + lVolume +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+model5 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme + abs_intra_day +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
+model6 <- felm(highlow ~ mention + dem_weighted_mention_avg + cons_weighted_mention_avg +
+                 + own_sec_mention_avg_notme + own_sec_highlow_notme + lVolume + abs_intra_day +
+                 abs_overnight + 
+                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+               | Code + Date, 
+               data = model_df)
 
-# Plot the Variable Coefficient Model results for highlow
-coefficient_data <- model4$coefficients
-colnames(coefficient_data) <- c("Constant", "mention")
-# Remove outlier (CCL) and NAs
-coefficient_data <- subset(coefficient_data, !is.na(mention))
-
-# Reshape to plot all on same graph
-coefficient_data$id <- 1:nrow(coefficient_data)
-df.m <- melt(coefficient_data, "id")
-
-ggplot(data = df.m, aes(x=value)) + geom_density(aes(fill = "blue"),kernel = "gaussian") +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~variable) + theme(legend.position="none")  + 
-  labs(y = "Density", x = "Coefficient values") + ggtitle("High-to-low volatility")
-figure_location <- "~/Documents/DPhil/Firm_level_news/figures"
-export_filename = paste(figure_location, "vcm_coeffs_highlow.png", sep = "/")
-ggsave(export_filename, width = 8, height = 4, dpi = 200)
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F) 
 
 
 
 
 
+"
+Index level effect
+"
+index_data <- total_data %>%
+  group_by(period, Date, weekday) %>%
+  summarise(mention = mean(mention, na.rm = T), 
+            IndexHighLow = mean(IndexHighLow, na.rm = T),
+            highlow = mean(highlow, na.rm = T),
+            Index_abs_Change = mean(Index_abs_Change, na.rm = T),
+            abs_intra_day = mean(abs_intra_day, na.rm = T),
+            VI_put = mean(VI_put, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(IndexHighLow_1lag = lag(IndexHighLow, order_by = period)) %>%
+  mutate(highlow_1lag = lag(highlow, n=1, order_by = period)) %>%
+  mutate(highlow_2lag = lag(highlow, n=2, order_by = period)) %>%
+  mutate(highlow_3lag = lag(highlow, n=3, order_by = period)) %>%
+  mutate(highlow_4lag = lag(highlow, n=4, order_by = period)) %>%
+  mutate(highlow_5lag = lag(highlow, n=5, order_by = period)) %>%
+  filter(mention < 0.1)
+
+
+ggplot(index_data) + 
+  geom_line(aes(x = as.Date(Date), y = mention*100, color = "mention")) + 
+  geom_line(aes(x = as.Date(Date), y = highlow, color = "highlow"))
+
+model1 <- lm(IndexHighLow ~ mention, index_data)
+model2 <- lm(IndexHighLow ~ mention + IndexHighLow_1lag, index_data) 
+stargazer(model1, model2, table.placement = "H", df = F)
 
 
 
-
+"
+Mediation (might revisit)
+"
