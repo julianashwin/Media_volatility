@@ -24,26 +24,10 @@ df = CSV.read("/Users/julianashwin/Documents/DPhil/Clean_Data/FT/matched/BTR_FT_
 
 ## Keep those where all values of highlow are available
 numeric_cols = [:highlow, :highlow_1lag, :highlow_2lag, :highlow_3lag,
-    :highlow_4lag, :highlow_5lag, :VI_put, :VI_call]
+    :highlow_4lag, :highlow_5lag, :VI_put]
 df = df[completecases(df[:,numeric_cols]),:]
-## Clean up and compute loughran sentiment
+## Replace missing text with empty string
 df.text_clean[ismissing.(df.text_clean)] .= ""
-df.text[ismissing.(df.text)] .= ""
-df.text = join.(split.(lowercase.(string.(df.text))), " ")
-df.sentiment = sentimentscore(df.text, LM_dicts)
-df.sentiment[isnan.(df.sentiment)] .= 0.
-
-## Add some id columns
-df.Code_id = convert_to_ids(string.(df.Code))
-df.Date_id = convert_to_ids(string.(df.Date))
-
-for col in numeric_cols
-    ex1 = Meta.parse("df."*string(col)*" =  Array{Float64,1}(df."*string(col)*")")
-    eval(ex1)
-end
-
-df.highlow_firmav = group_mean(df.highlow, df.Code_id, same_length = true)
-df.highlow_dateav = group_mean(df.highlow, df.Date_id, same_length = true)
 
 showtable(df)
 
@@ -51,25 +35,39 @@ showtable(df)
 # Check that the variables look sensible
 plot(df.highlow[1:200], label = ["highlow volatility"], legend = :bottomleft,xguidefontsize=8)
 plot!(df.abs_intra_day[1:200], label = ["abs return"])
-
-fm = @formula(highlow ~ mention + highlow_1lag +
-    highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
-    highlow_dateav + highlow_firmav + sentiment)
+df.abs_overnight
+fm = @formula(highlow ~ mention +
+    LM_sentiment + abs_overnight +
+    day_highlow + firm_highlow + day_lVolume + firm_lVolume +
+    highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+    lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+    VI_put_1lag +  VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+    abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+    abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+    return_1lag + return_2lag + return_3lag + return_4lag + return_5lag)
 display(lm(fm, df))
 
-fm = @formula(highlow ~ mention + sentiment + highlow_1lag +
-    highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
-    highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
+
+fm = @formula(highlow ~ mention + lVolume +
+    LM_sentiment + abs_overnight +
+    day_highlow + firm_highlow + day_lVolume + firm_lVolume +
+    highlow_1lag +highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+    lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+    VI_put_1lag +  VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+    abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+    abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+    return_1lag + return_2lag + return_3lag + return_4lag + return_5lag)
 display(lm(fm, df))
 
-fm = @formula(highlow ~ mention + lVolume + sentiment + highlow_1lag +
-    highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
-    highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
-display(lm(fm, df))
-
-fm = @formula(abs_intra_day ~ mention + sentiment + highlow_1lag +
-    highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
-    highlow_dateav + highlow_firmav + sentiment + VI_put + VI_call)
+fm = @formula(lVolume ~ mention +
+    LM_sentiment + abs_overnight +
+    day_highlow + firm_highlow + day_lVolume + firm_lVolume +
+    highlow_1lag +highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag +
+    lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+    VI_put_1lag +  VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+    abs_intra_1lag + abs_intra_2lag + abs_intra_3lag + abs_intra_4lag + abs_intra_5lag +
+    abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+    return_1lag + return_2lag + return_3lag + return_4lag + return_5lag)
 display(lm(fm, df))
 
 
@@ -92,17 +90,26 @@ df.doc_idx = 1:nrow(df)
 Prepare data for estimation
 """
 ## Create labels and covariates
-x = hcat(df.mention, df.sentiment,
-    df.highlow_dateav, df.highlow_firmav,
-    df.highlow_1lag, df.highlow_2lag, df.highlow_3lag, df.highlow_4lag, df.highlow_5lag,
-    df.VI_put, df.VI_call)
-y = df.highlow
-docidx_vars = df.doc_idx
-docidx_dtm = df.doc_idx
+x_names = [:mention, :abs_intra_day,
+    :LM_sentiment, :abs_overnight,
+    :day_highlow, :firm_highlow, :day_lVolume, :firm_lVolume,
+    :highlow_1lag, :highlow_2lag, :highlow_3lag, :highlow_4lag, :highlow_5lag,
+    :lVolume_1lag, :lVolume_2lag, :lVolume_3lag, :lVolume_4lag, :lVolume_5lag,
+    :VI_put_1lag, :VI_put_2lag, :VI_put_3lag, :VI_put_4lag, :VI_put_5lag,
+    :abs_intra_1lag, :abs_intra_2lag, :abs_intra_3lag, :abs_intra_4lag, :abs_intra_5lag,
+    :abs_return_1lag, :abs_return_2lag, :abs_return_3lag, :abs_return_4lag, :abs_return_5lag,
+    :return_1lag, :return_2lag, :return_3lag, :return_4lag, :return_5lag]
+
+model_df = df[completecases(df[:,x_names]),:]
+x = identity.(Matrix(model_df[:,x_names]))
+sum(ismissing.(x))
+y = model_df.highlow
+docidx_vars = model_df.doc_idx
+docidx_dtm = model_df.doc_idx
 D = length(unique(docidx_dtm))
 
 ## Use TextAnalysis package to create a Corpus
-docs = StringDocument.(df.text_clean)
+docs = StringDocument.(model_df.text_clean)
 crps = Corpus(docs)
 update_lexicon!(crps)
 
@@ -133,7 +140,7 @@ if save_files; savefig("figures/FT_BTR/FT_trainsplit.pdf"); end;
 
 
 ## OLS regression
-regressors = hcat(ones(size(all_data.x,1)),all_data.x)
+regressors = hcat(ones(size(all_data.x,1)),all_data.x[:, vcat([1],Int.(3:38))])
 ols_coeffs = inv(transpose(regressors)*regressors)*(transpose(regressors)*all_data.y)
 mse_ols = mean((all_data.y .- regressors*ols_coeffs).^2)
 
@@ -160,7 +167,7 @@ Set priors and estimation optioncs here to be consistent across models
 ## Initialiase estimation options
 opts = BTROptions()
 ## Number of topics
-opts.ntopics = 20
+opts.ntopics = 30
 ## LDA priors
 opts.α=0.5
 opts.η=0.1
@@ -190,14 +197,14 @@ opts.ω_tol = 0.015 # Convergence tolerance for regression coefficients ω
 opts.rel_tol = true # Whether to use a relative convergence criteria rather than just absolute
 
 ## Regressors
-opts.xregs = [1,2,3,4,5,6,7,8,9,10,11]
+opts.xregs = vcat([1],Int.(3:38))
 opts.interactions = Array{Int64,1}([])
 
 """
 Run some text-free regressions for benchmarking
 """
 ## Define regressors
-regressors = hcat(ones(size(all_data.x,1)),all_data.x)
+regressors = hcat(ones(size(all_data.x[:,opts.xregs],1)),all_data.x[:,opts.xregs])
 ## Bayesian linear regression
 blr_coeffs, blr_σ2, blr_coeffs_post, σ2_post = BLR_Gibbs(all_data.y, regressors, iteration = opts.M_iters,
     m_0 = opts.μ_ω, σ_ω = opts.σ_ω, a_0 = opts.a_0, b_0 = opts.b_0)
@@ -210,8 +217,10 @@ mse_blr = mean((all_data.y .- predict_blr).^2)
 Estimate default version
 """
 ## Create model object
+opts.ntopics = 20
 btropts = deepcopy(opts)
 btrcrps_all = create_btrcrps(all_data, btropts.ntopics)
+btropts.xregs = vcat([1],Int.(3:38))
 btrmodel = BTRModel(crps = btrcrps_all, options = btropts)
 ## Estimate BTR with EM-Gibbs algorithm
 btrmodel.options.plot_ω = false
@@ -220,9 +229,27 @@ btrmodel = BTRemGibbs(btrmodel)
 BTR_plot(btrmodel.β, btrmodel.ω_post, btrmodel.crps.vocab,
     left_mar = 1,
     plt_title = "FT BTR", fontsize = 10, nwords = 5, title_size = 10)
+plot!(size = (600,500))
+savefig("BTR_results/BTR_K"*string(btrmodel.crps.ntopics)*"_results.pdf")
+
+
+btropts_zeros = deepcopy(btropts)
+btropts_zeros.emptydocs = :zero
+btropts_zeros.xregs = vcat(Int.(3:38))
+
+btrmodel_zeros = BTRModel(crps = btrcrps_all, options = btropts_zeros)
+btrmodel_zeros = BTRemGibbs(btrmodel)
+
+BTR_plot(btrmodel_zeros.β, btrmodel_zeros.ω_post, btrmodel_zeros.crps.vocab,
+    left_mar = 1,
+    plt_title = "FT BTR", fontsize = 10, nwords = 5, title_size = 10)
+plot!(size = (600,600))
+savefig("BTR_results/BTR_K"*string(btrmodel.crps.ntopics)*"_results.pdf")
 
 btrmodel.ω[(btrmodel.options.ntopics+1):end]
 
+ols_coeffs = inv(transpose(btrmodel.regressors)*btrmodel.regressors)*(
+    transpose(btrmodel.regressors)*btrmodel.y)
 
 """
 Dataframes to fill
@@ -478,7 +505,7 @@ if save_files
     #CSV.write("BTR_results/TE_Krobustness.csv",TE_Krobustness_df)
 end
 TE_Krobustness_df = CSV.read("BTR_results/TE_Krobustness.csv",DataFrame)
-
+Ks = [2,5,10,15,20,25,30,40,50]
 
 """
 Plot treatment effects
@@ -536,23 +563,31 @@ plot!(size = (500,400))
 l = @layout [a b; c d] #a{0.2w}]
 
 p1 = plot([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], #suplot = 1,
-    xlim = (0,maximum(Ks)+2), ylim = (-0.3, 0.2), xlabel = "",
-    ylabel = "Media Coverage Effect", title = "BTR",
-    linestyle = :dash,color =:red, label = "Ground truth", legend = false)
-plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
-plot_estimates(TE_Krobustness_df, Ks, "BTR", BTR_cols, :lightblue)
+    xlim = (0,maximum(Ks)+2), ylim = (-0.1, 0.2),
+    ylabel = "FT article effect", title = "BTR", xlabel = "Number of Topics",
+    linestyle = :dash,color =:black, label = "Ground truth", legend = false)
+#plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
+plot_estimates(TE_Krobustness_df, Ks, "BTR", BTR_cols, :blue)
+plot!(size = (400,300))
+savefig("BTR_results/BTR_Krobust.pdf")
+
+
+p3 = plot([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], #suplot = 3,
+    xlim = (0,maximum(Ks)+2), ylim = (-0.1, 0.2), xlabel = "Number of Topics",
+    ylabel = "FT article effect", title = "LDA",
+    linestyle = :dash,color =:black, label = "Ground truth", legend = false)
+#plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
+plot_estimates(TE_Krobustness_df, Ks, "LDA", LDA_cols, :green)
+plot!(size = (400,300))
+savefig("BTR_results/LDA_Krobust.pdf")
+
+
 p2 = plot([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], #suplot = 2,
     xlim = (0,maximum(Ks)+2), ylim = (-0.3, 0.2), xlabel = "",
     ylabel = "", title = "BTR (sentiment interaction)",
     linestyle = :dash,color =:red, label = "Ground truth", legend = false)
 plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
 plot_estimates(TE_Krobustness_df, Ks, "BTR (sentiment interaction)", BTRint_cols, :blue)
-p3 = plot([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], #suplot = 3,
-    xlim = (0,maximum(Ks)+2), ylim = (-0.3, 0.2), xlabel = "Number of Topics",
-    ylabel = "Media Coverage Effect", title = "LDA",
-    linestyle = :dash,color =:red, label = "Ground truth", legend = false)
-plot_estimates(TE_Krobustness_df, Ks, "No Text LR", NoText_cols, :grey)
-plot_estimates(TE_Krobustness_df, Ks, "LDA", LDA_cols, :green)
 p4 = plot([0.,(Float64(maximum(Ks))+2.0)],[-0.,-0.], #suplot = 4,
     xlim = (0,maximum(Ks)+2), ylim = (-0.3, 0.2), xlabel = "Number of Topics",
     ylabel = "", title = "sLDA",
