@@ -85,34 +85,36 @@ stargazer(model1, model2, model3, model4, model5, model6,
 "
 Various controls
 "
-persist_coefs <- data.frame(model = c("Baseline", "LR + volatility lags", "LR + volatility, volume and return lags", 
-                                      "LR + volatility, volume and return lags + implied volatility",
-                                      "LR + volatility, volume and return lags + implied volatility + realised return",
-                                      "RF + volatility, volume and return lags + implied volatility",
-                                      "RF + volatility, volume and return lags + implied volatility + realised return"), 
+persist_coefs <- data.frame(model = c("1) Baseline", "2) LR + volatility lags", "3) LR + volatility, volume and return lags", 
+                                      "4) DoubleML + volatility, volume and return lags",
+                                      "5) LR + volatility, volume and return lags + implied volatility",
+                                      "6) LR + volatility, volume and return lags + implied volatility + realised return",
+                                      "7) DoubleML + volatility, volume and return lags + implied volatility",
+                                      "8) DoubleML + volatility, volume and return lags + implied volatility + realised return"), 
                             coef = 0, se = 0)
 
 persist_coefs$model_factor <- factor(persist_coefs$model, ordered = T,
-                                    levels <- c("Baseline", "LR + volatility lags", "LR + volatility, volume and return lags", 
-                                                "LR + volatility, volume and return lags + implied volatility",
-                                                "LR + volatility, volume and return lags + implied volatility + realised return",
-                                                "RF + volatility, volume and return lags + implied volatility",
-                                                "RF + volatility, volume and return lags + implied volatility + realised return"))
+                                     c("1) Baseline", "2) LR + volatility lags", "3) LR + volatility, volume and return lags", 
+                                       "4) DoubleML + volatility, volume and return lags",
+                                       "5) LR + volatility, volume and return lags + implied volatility",
+                                       "6) LR + volatility, volume and return lags + implied volatility + realised return",
+                                       "7) DoubleML + volatility, volume and return lags + implied volatility",
+                                       "8) DoubleML + volatility, volume and return lags + implied volatility + realised return"))
 
 
 ## Baseline model
 model1 <- felm_DK_se(highlow ~ mention + abs_overnight + 
                        highlow_1lag | Code + period, total_data)
-persist_coefs$coef[which(persist_coefs$model == "Baseline")] <- summary(model1)$coefficients["mention","Estimate"]
-persist_coefs$se[which(persist_coefs$model == "Baseline")] <- summary(model1)$coefficients["mention","Std. Error"]
+persist_coefs$coef[which(persist_coefs$model == "1) Baseline")] <- summary(model1)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "1) Baseline")] <- summary(model1)$coefficients["mention","Std. Error"]
 
 ## More highlow lags
 model2 <- felm_DK_se(highlow ~ mention  + abs_overnight + 
                        highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
                        highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag
                      |Code + period, total_data)
-persist_coefs$coef[which(persist_coefs$model == "LR + volatility lags")] <- summary(model2)$coefficients["mention","Estimate"]
-persist_coefs$se[which(persist_coefs$model == "LR + volatility lags")] <- summary(model2)$coefficients["mention","Std. Error"]
+persist_coefs$coef[which(persist_coefs$model == "2) LR + volatility lags")] <- summary(model2)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "2) LR + volatility lags")] <- summary(model2)$coefficients["mention","Std. Error"]
 
 ## More price movement lags
 model3 <- felm_DK_se(highlow ~ mention + abs_overnight + 
@@ -125,8 +127,8 @@ model3 <- felm_DK_se(highlow ~ mention + abs_overnight +
                        return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
                        return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
                      |Code + period, total_data)
-persist_coefs$coef[which(persist_coefs$model == "LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Estimate"]
-persist_coefs$se[which(persist_coefs$model == "LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Std. Error"]
+persist_coefs$coef[which(persist_coefs$model == "3) LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "3) LR + volatility, volume and return lags")] <- summary(model3)$coefficients["mention","Std. Error"]
 
 ## Implied volatility lags
 model4 <- felm_DK_se(highlow ~ mention + abs_overnight + 
@@ -141,8 +143,8 @@ model4 <- felm_DK_se(highlow ~ mention + abs_overnight +
                        return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
                        return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
                      |Code + period, total_data)
-persist_coefs$coef[which(persist_coefs$model == "LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Estimate"]
-persist_coefs$se[which(persist_coefs$model == "LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Std. Error"]
+persist_coefs$coef[which(persist_coefs$model == "5) LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Estimate"]
+persist_coefs$se[which(persist_coefs$model == "5) LR + volatility, volume and return lags + implied volatility")] <- summary(model4)$coefficients["mention","Std. Error"]
 
 
 ## Realised returns
@@ -159,33 +161,42 @@ model5 <- felm_DK_se(highlow ~ mention + abs_overnight + abs_intra_day +
                        return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
                      |Code + period, total_data)
 persist_coefs$coef[which(persist_coefs$model == 
-                           "LR + volatility, volume and return lags + implied volatility + realised return")] <- 
+                           "6) LR + volatility, volume and return lags + implied volatility + realised return")] <- 
   summary(model5)$coefficients["mention","Estimate"]
 persist_coefs$se[which(persist_coefs$model == 
-                         "LR + volatility, volume and return lags + implied volatility + realised return")] <- 
+                         "6) LR + volatility, volume and return lags + implied volatility + realised return")] <- 
   summary(model5)$coefficients["mention","Std. Error"]
 
-DoubleML_effects <- read.csv("figures/DoubleML_effects.csv")
+#DoubleML_effects <- read.csv("figures/DoubleML_effects.csv")
+
+stargazer(model1, model2, model3, model4, model5,
+          table.placement = "H", df = F, 
+          title = "Controlling for a wide set of past price movements and trading activity")
 
 
 ## Random forest 
 persist_coefs$coef[which(persist_coefs$model == 
-                           "RF + volatility, volume and return lags + implied volatility")] <- 0.16793
+                           "4) DoubleML + volatility, volume and return lags")] <- 0.15284
 persist_coefs$se[which(persist_coefs$model == 
-                         "RF + volatility, volume and return lags + implied volatility")] <- 0.02209
+                         "4) DoubleML + volatility, volume and return lags")] <- 0.02116
+
+persist_coefs$coef[which(persist_coefs$model == 
+                           "7) DoubleML + volatility, volume and return lags + implied volatility")] <- 0.16793
+persist_coefs$se[which(persist_coefs$model == 
+                         "7) DoubleML + volatility, volume and return lags + implied volatility")] <- 0.02209
 
 ## Random forest with realised returns
 persist_coefs$coef[which(persist_coefs$model == 
-                           "RF + volatility, volume and return lags + implied volatility + realised return")] <- 0.14254
+                           "8) DoubleML + volatility, volume and return lags + implied volatility + realised return")] <- 0.14254
 persist_coefs$se[which(persist_coefs$model == 
-                         "RF + volatility, volume and return lags + implied volatility + realised return")] <- 0.01946 
+                         "8) DoubleML + volatility, volume and return lags + implied volatility + realised return")] <- 0.01946 
 
 
 
 
 ggplot(persist_coefs, aes(y=fct_rev(model_factor), x=coef)) + theme_bw() + 
   geom_point(shape=21, size=3, fill="white") +
-  geom_errorbar(width=.1, aes(xmin=coef-1.96*se, xmax=coef+1.96*se)) + 
+  geom_errorbar(width=.3, aes(xmin=coef-1.96*se, xmax=coef+1.96*se)) + 
   geom_vline(aes(xintercept = 0), linetype = "dashed") +
   labs(y = "Model", x = "FT article effect")
 
@@ -202,6 +213,32 @@ DoubleML_keep  <- DoubleML_effects %>%
 DoubleML_keep
 
 
+as_tibble(total_data) %>% filter(Code == "RBS.L", Date < "2009-01-19") %>% 
+  select(Code, highlow, abs_intra_day, VI_put, VI_call) %>% 
+  group_by(Code) %>% 
+  summarise_all(mean, na.rm = T)
+as_tibble(total_data) %>% filter(Code == "RBS.L", Date < "2009-01-19") %>% 
+  select(Code, highlow, abs_intra_day, VI_put, VI_call) %>% 
+  group_by(Code) %>% 
+  summarise_all(sd, na.rm = T)
+
+as_tibble(total_data) %>% 
+  filter(Date %in% c("2009-01-12","2009-01-13","2009-01-14","2009-01-15",
+                     "2009-01-16","2009-01-19","2009-01-20") & Code == "RBS.L") %>% 
+  select(Code, Date, highlow, abs_intra_day, VI_put, VI_call) 
+
+as_tibble(total_data) %>% 
+  filter(Date %in% c("2009-01-12","2009-01-13","2009-01-14","2009-01-15",
+                     "2009-01-16","2009-01-19","2009-01-20") & Code == "RBS.L") %>% 
+  select(Code, Date, highlow, abs_overnight, abs_intra_day, VI_put, VI_call) %>% 
+  ggplot(aes(x = as.Date(Date))) + theme_bw() + 
+  geom_line(aes(y = highlow/max(highlow), color = "volatility")) +
+  geom_line(aes(y = abs_intra_day/max(abs_intra_day), color = "abs return")) + 
+  geom_line(aes(y = VI_put/max(VI_put), color = "VI_put")) + 
+  geom_line(aes(y = VI_call/max(VI_call), color = "VI_call"))  
+
+
+0.1229409*0.576 + 0.6969798*66.4 + 0.6332801*1.13 
 
 "
 Forward looking and persistence experiments variables
@@ -360,24 +397,205 @@ model5 <- felm_DK_se(intra_day ~ LM_sentiment +
 summary(model5)
 
 
-stargazer(model1, model2, model3, model4, model5,
+stargazer(model1, model3, model4, model5,
           table.placement = "H", df = F)
 
 
+"
+Include topics
+"
+library(topicmodels)
+library(tm)
+require(slam)
+require(tidytext)
+require(tidyverse)
+
+text_data <- total_data %>%
+  filter(text_clean != "") %>%
+  select(Code, Date, intra_day, text_clean)
+total_corpus <- Corpus(VectorSource(unlist(text_data[, "text_clean"])))
+total_dtm <- DocumentTermMatrix(total_corpus, control = list(minsWordLength = 3))
+
+total_dtm <- total_dtm[,col_sums(total_dtm) > 30]
+print(paste("Dimensions of total_dtm are", dim(total_dtm)[1], "documents and", 
+            dim(total_dtm)[2], "words in vocab"))
+vocab<-total_dtm$dimnames$Terms
+
+set.seed(1234)
+lda_gibbs <- LDA(total_dtm, k = 20, method = "Gibbs",
+                 control = list(verbose = 1000, burnin = 2000, thin = 10, iter = 1000))
+
+lda_topics <- tidy(lda_gibbs, matrix = "beta")
+write.csv(lda_topics,"BTR_results/lda_topics.csv")
+
+# Calculate FREX scores (Bischof and Airoldi, 2012)
+topics_desc <- pivot_wider(lda_topics, id_cols = c(term), names_from = topic, 
+                           names_glue = "beta{topic}", values_from = beta) %>%
+  arrange(term)
+
+topicnames <- paste0("beta", 1:20)
+w <- 0.3
+for (kk in 1:20){
+  E_temp <- topics_desc[,paste0("beta",kk)]/row_sums(topics_desc[,topicnames])
+  
+  topics_desc[,paste0("FREX",kk)] <- (w/topics_desc[,paste0("beta",kk)] + 
+                                        (1-w)/E_temp)^(-1)
+}
+topics_desc <- topics_desc %>%
+  select(-(beta1:beta20)) %>%
+  pivot_longer(cols = FREX1:FREX20, names_to = "topic", values_to = "FREX") %>%
+  mutate(topic = as.numeric(str_replace(topic, "FREX", "")))
+lda_topics_frex <- lda_topics %>%
+  inner_join(topics_desc, by = c("topic", "term"))
+
+
+top_terms <- lda_topics_frex %>%
+  group_by(topic) %>%
+  top_n(10,beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms_frex <- lda_topics_frex %>%
+  group_by(topic) %>%
+  top_n(10,FREX) %>%
+  ungroup() %>%
+  arrange(topic, -FREX)
+
+
+top_names <- top_terms %>%
+  group_by(topic) %>%
+  summarise(term = paste(term, collapse = ".")) %>%
+  mutate(name = str_c("T", topic,".", term))
+
+lda_theta <- data.frame(lda_gibbs@gamma)
+names(lda_theta) <- top_names$name
+
+topic_data <- cbind(text_data, lda_theta)
+topic_data$nword <- row_sums(total_dtm)
+#for(kk in top_names$name){
+#  topic_data[,kk] <- topic_data[,kk] + (lda_gibbs@alpha*topic_data[,kk]*20-lda_gibbs@alpha)/topic_data$nword
+#}
+
+topic_data$nword 
+
+# Plot these top ten terms for each topic
+top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+top_terms_frex %>%
+  mutate(term = reorder(term, FREX)) %>%
+  ggplot(aes(term, FREX, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+
+merge_data <- total_data %>%
+  select(-text_clean) %>%
+  left_join(topic_data, by = c("Code", "Date", "intra_day")) %>%
+  mutate(across(T1.said.govern.case.investig.report.regul.claim.court.rule.alleg:T20.trade.exchang.lse.london.market.stock.will.deutsch.clear.list,
+                ~ replace_na(.x, 0)))
 
 
 
+model1 <- felm_DK_se(highlow ~  LM_sentiment + 
+                       T1.said.govern.case.investig.report.regul.claim.court.rule.alleg +             
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, merge_data)
+summary(model1)
 
+model1 <- felm_DK_se(highlow ~  
+    (T1.said.govern.case.investig.report.regul.claim.court.rule.alleg) +
+    (T2.say.one.can.now.get.time.need.busi.mani.think) +
+    (T3.bank.barclay.hsbc.rbs.capit.lloyd.invest.will.financi.said) +
+    (T4.per.cent.share.said.stock.ftse.market.price.gain.group) +
+    (T5.retail.sale.said.tesco.year.store.group.will.market.boot) + 
+    (T6.per.cent.profit.pound.year.share.said.growth.increas.quarter) + 
+    (T7.compani.year.taylor.contract.said.will.oper.engin.group.build) + 
+    (T8.shell.oil.gas.compani.product.project.dollar.royal.reserv.said) + 
+    (T9.group.compani.busi.said.market.wpp.pearson.advertis.publish.time) + 
+    (T10.compani.will.power.new.energi.drug.nation.gsk.said.year) + 
+    (T11.bhp.mine.said.rio.compani.price.year.group.billiton.iron) + 
+    (T12.pound.compani.said.life.pension.scheme.insur.debt.will.rate) + 
+    (T13.oper.market.stake.vodafon.deal.group.per.china.cent.ventur) + 
+    (T14.execut.chief.chairman.sir.director.sharehold.board.investor.year.appoint) + 
+    (T15.manag.invest.fund.asset.busi.privat.investor.equiti.group.compani) + 
+    (T16.share.deal.offer.bid.sharehold.stake.takeov.merger.propos.price) + 
+    (T17.year.cost.price.cut.cash.analyst.dividend.return.investor.capit) + 
+    (T18.compani.oil.said.bps.well.russian.gulf.spill.will.russia) + 
+    (T19.servic.bskyb.itv.will.news.compani.custom.network.internet.telecom) + 
+ (T20.trade.exchang.lse.london.market.stock.will.deutsch.clear.list) +
+                       abs_overnight + 
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     | Economic_Sector + Code + period, merge_data)
+summary(model1)
+
+topicreg_df <- tibble(variable = rownames(model1$coefficients), 
+                     value = model1$coefficients[,"highlow"], se = summary(model1)$coefficients[,"Std. Error"]) %>%
+  filter(str_detect(variable, "T[0-9]+"))
+
+topicreg_df %>%
+  mutate(variable = factor(variable, levels = top_names$name, ordered = TRUE)) %>%
+  ggplot() + theme_bw() + 
+  geom_vline(aes(xintercept = 0), linetype = "dashed") +
+  geom_point(aes(x = value, y = fct_rev(variable))) +
+  geom_errorbar(aes(xmin = value-1.96*se, xmax = value+1.96*se, y = fct_rev(variable)), width=.5) + 
+  labs(y = "", x = "Coefficient")
+
+ggsave("figures/topic_coefs.pdf", width = 6, height = 4)
+
+  
+
+
+  
+  
 "
 Time varying effect
 "
-med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put")
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put_1lag")
 model_df <- total_data[complete.cases(total_data[,med_vars]), which(!str_detect(names(total_data), "text"))]
 model <- summary(feols(highlow ~ mention*as.factor(year)-mention-as.factor(year) + 
-                         highlow_1lag + VI_put_1lag|Code + period, model_df), vcov = DK ~ period)
+                         abs_overnight + 
+                         VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                         VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                         highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                         highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                         lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                         lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                         abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                         abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                         return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                         return_6lag + return_7lag + return_8lag + return_9lag + return_10lag|Code + period,
+                       total_data), vcov = DK ~ period)
+#model <- summary(feols(highlow ~ mention*as.factor(year)-mention-as.factor(year) + 
+#                         highlow_1lag + VI_put_1lag|Code + period, model_df), vcov = DK ~ period)
+
 coef_table <- data.frame(model$coeftable)
 coef_table$year <- rownames(coef_table)
-coef_table <- coef_table[which(!(coef_table$year %in% c("highlow_1lag", "VI_put_1lag"))),]
+coef_table <- coef_table[which(str_detect(coef_table$yea,"as\\.factor")),]
 coef_table$year <- as.numeric(str_remove(coef_table$year, "mention:as\\.factor\\(year\\)"))
 
 ggplot(coef_table, aes(x = year)) + theme_bw() + 
@@ -565,6 +783,20 @@ model3 <- felm_DK_se(highlow ~ mention*as.factor(lVolume_quart)-mention-as.facto
                         |Code + period, model_df)
 stargazer(model1, model2, model3, 
           table.placement = "H", df = F)
+
+model3 <- felm_DK_se(highlow ~ mention*as.factor(Economic)-mention-as.factor(lVolume_quart) + 
+                       abs_overnight +
+                       VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, model_df)
 
 
 
