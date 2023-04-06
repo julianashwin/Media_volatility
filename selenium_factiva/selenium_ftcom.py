@@ -54,9 +54,8 @@ driver.find_element(By.XPATH, '//*[@id="dr"]').click()
 
 ## Dataframe to fill
 
-NN = len(matched_articles)
-NN = 9000
-for ii in tqdm(range(6046,NN)):
+NN = len(matched_articles) 
+for ii in tqdm(range(16561,NN)):
     print("\n"+str(ii)+"\n")
     # Extract the necessary info
     frdate = matched_articles.Date_lag[ii]
@@ -72,8 +71,6 @@ for ii in tqdm(range(6046,NN)):
     toyr = todate[0:4]
     tomth = todate[5:7]
     tody = todate[8:10]
-    ## From
-    # Day
     try:
         driver.find_element(By.XPATH, '//*[@id="frd"]').clear()
     except:
@@ -84,7 +81,6 @@ for ii in tqdm(range(6046,NN)):
             driver.find_element(By.XPATH, '//*[@id="frd"]').clear()
         except:
             driver.find_element(By.XPATH, '//*[@id="frd"]').clear()
-
     driver.find_element(By.XPATH, '//*[@id="frd"]').send_keys(frdy)
     # Month
     driver.find_element(By.XPATH, '//*[@id="frm"]').clear()
@@ -110,7 +106,7 @@ for ii in tqdm(range(6046,NN)):
     # Press search
     driver.find_element(By.XPATH, '//*[@id="btnSBSearch"]/div/span').click()
     print("Wait for page to load")
-    sleep(3)
+    sleep(5)
     ## Do the saving of files here
     articles_found = "No"
     try:
@@ -127,9 +123,9 @@ for ii in tqdm(range(6046,NN)):
         driver.find_element(By.XPATH, '//*[@id="listMenu-id-3"]/li[2]/a').click()
         sleep(3)
         articles_found = "Yes"
-        print("Download successful for "+code+" around "+date)
+        print("Download successful for "+code+" around "+todate)
     except:
-        print("No articles for "+code+" around "+date)
+        print("No articles for "+code+" around "+todate)
         sleep(1)
     
     matched_articles.loc[ii, "save_time"] = str(datetime.datetime.now())
@@ -151,7 +147,4 @@ for ii in tqdm(range(6046,NN)):
             sleep(2.5)
             driver.find_element(By.XPATH, '//*[@id="btnModifySearch"]/div/span').click()
     sleep(1.5)
-
-
-
 
