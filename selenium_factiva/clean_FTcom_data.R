@@ -3,6 +3,7 @@ rm(list = ls())
 
 library(tidyverse)
 library(striprtf)
+library(svMisc)
 
 
 raw_dir <- "/Users/julianashwin/Documents/DPhil/Raw_Data/FT_com/"
@@ -16,10 +17,9 @@ all_files <- dir(raw_dir)
 
 articles_df <- tibble()
 files_df <- tibble(filename = all_files, narticles = NA)
-filename <- all_files[3200]
-pb = txtProgressBar(min = 1, max = nrow(files_df))
-for (ii in 1:nrow(files_df)){
-  setTxtProgressBar(pb,ii)
+
+for (ii in 101:nrow(files_df)){
+  progress(ii, progress.bar = TRUE)
   
   filename <- files_df$filename[ii]
   file_text <- read_rtf(str_c(raw_dir, filename))
@@ -34,13 +34,26 @@ for (ii in 1:nrow(files_df)){
     article <- str_squish(file_text[(break_points[jj]+1):(break_points[jj+1])])
     article <- article[which(article != "")]
     # Identify some key points
-    word_count <- which(str_detect(article, "^[0-9]+ words$"))
-    copyright <- which(str_detect(article, "^\\(c\\) [0-9]+"))
+    word_count <- which(str_detect(article, "^[0-9]+ words$|^[0-9]+,[0-9]+ words$"))
+    copyright <- which(str_detect(article, "^\\(c\\) [0-9]+|^Copyright [0-9]+"))
+    date_line <- which(str_detect(article, "^[0-9]+ [A-Z][a-z]+ [0-9]+$"))
     
-    article[1]
-    article[word_count]
-    article[copyright]
+    docid <- article[length(article)]
+    headline <- article[1]
+    word_count <- article[word_count]
+    date <- article[date_line]
+    main_text <- paste(article[(copyright+1):(length(article)-1)], collapse = " ")
     
+    article_row <- tibble(file_id = filename, article_id = docid, date = date, headline = headline, 
+                          word_count = word_count, main_text = main_text)
+    
+    articles_df <- bind_rows(articles_df, article_row)
   }
   
+  articles_df %>%
+    write.csv("selenium_factiva/FTcom_articles.csv", row.names = F)
+  
 }
+
+
+
