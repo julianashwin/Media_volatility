@@ -4,23 +4,22 @@ rm(list = ls())
 library(tidyverse)
 library(striprtf)
 library(svMisc)
+library(progress)
 
 
 raw_dir <- "/Users/julianashwin/Documents/DPhil/Raw_Data/FT_com/"
+clean_dir <- "/Users/julianashwin/Documents/DPhil/Clean_Data/FT/FT_com/"
 meta_dir <- "/Users/julianashwin/Documents/GitHub/Media_volatility/selenium_factiva/save_times/"
-
-# Import the file metadat
-meta_files <- dir(meta_dir)
-
 
 all_files <- dir(raw_dir)
 
 articles_df <- tibble()
 files_df <- tibble(filename = all_files, narticles = NA)
 
-for (ii in 101:nrow(files_df)){
-  progress(ii, progress.bar = TRUE)
-  
+pb <- progress_bar$new(total = nrow(files_df) - 991,
+                       format = " cleaning [:bar] :elapsedfull and :percent done, so :eta remaining")
+for (ii in 991:nrow(files_df)){
+  pb$tick()
   filename <- files_df$filename[ii]
   file_text <- read_rtf(str_c(raw_dir, filename))
   
@@ -50,10 +49,25 @@ for (ii in 101:nrow(files_df)){
     articles_df <- bind_rows(articles_df, article_row)
   }
   
-  articles_df %>%
-    write.csv("selenium_factiva/FTcom_articles.csv", row.names = F)
-  
 }
+
+articles_df %>%
+  write.csv(str_c(clean_dir,"FTcom_articles.csv"), row.names = F)
+
+
+# Import the file metadat
+meta_df <- tibble()
+meta_files <- dir(meta_dir)
+for (meta_file in meta_files){
+  file_in <- read_csv(str_c(meta_dir, meta_file))
+  meta_df <- rbind(meta_df, file_in)
+}
+
+# Import the article info
+article_info <- read_csv("selenium_factiva/article_info.csv")
+
+
+
 
 
 
