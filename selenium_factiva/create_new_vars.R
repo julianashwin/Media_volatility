@@ -27,6 +27,10 @@ matched_data %>%
   select(Code, Date) %>%
   unique() 
 
+# Import the data that's since been matched to the online articles
+online_article_info <- read_csv("selenium_factiva/article_info_matched.csv")
+
+
 
 "
 Import the full info for articles
