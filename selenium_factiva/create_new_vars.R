@@ -15,10 +15,10 @@ felm_DK_se <- function(reg_formula, df_panel, nlags = 3){
   model_felm <- felm(reg_formula, data = df_panel)
   
   stopifnot(length(model_felm$se) ==  
-              length(summary(model, vcov = DK ~ period)$coeftable[,"Std. Error"]))
-  model_felm$se <- summary(model, vcov = DK ~ period)$coeftable[,"Std. Error"]
-  model_felm$tval <- summary(model, vcov = DK ~ period)$coeftable[,"t value"]
-  model_felm$pval <- summary(model, vcov = DK ~ period)$coeftable[,"Pr(>|t|)"]
+              length(summary(model, vcov = DK(nlags) ~ period)$coeftable[,"Std. Error"]))
+  model_felm$se <- summary(model, vcov = DK(nlags) ~ period)$coeftable[,"Std. Error"]
+  model_felm$tval <- summary(model, vcov = DK(nlags) ~ period)$coeftable[,"t value"]
+  model_felm$pval <- summary(model, vcov = DK(nlags) ~ period)$coeftable[,"Pr(>|t|)"]
   return(model_felm)
 }
 
@@ -39,11 +39,14 @@ get_quantile <- function(x, qnt, as_numeric = TRUE){
 
 BTR_data <- read_csv("/Users/julianashwin/Documents/DPhil/Clean_Data/FT/matched/BTR_FT_data.csv")
 
-BTR_data %>%
-  filter(!is.na(VI_put)) %>%
-  group_by(Code, Company) %>%
-  summarise(Date_min = min(Date), Date_max = max(Date)) %>%
-  write_csv("tickers_intraday.csv")
+if (FALSE){
+  BTR_data %>%
+    filter(!is.na(VI_put)) %>%
+    group_by(Code, Company) %>%
+    summarise(Date_min = min(Date), Date_max = max(Date)) %>%
+    write_csv("tickers_intraday.csv")
+}
+
 
 
 ## Get data to use for identifying online articles
@@ -53,6 +56,7 @@ NER_data <- as_tibble(read.csv("/Users/julianashwin/Documents/DPhil/Clean_Data/F
 
 matched_data <- inner_join(NER_data, select(headline_data, article_id, Date, Code, headline)) %>%
   arrange(Code, Date) %>%
+  mutate(Date = as.Date(Date)) %>%
   inner_join(select(BTR_data,Code,Date)) %>%
   mutate(date_num = Date)
 
@@ -87,17 +91,23 @@ Import the full info for articles
 "
 full_df <- as_tibble(read.csv("/Users/julianashwin/Documents/DPhil/Clean_Data/FT/FTarticles_full.csv"))
 full_df <- full_df %>%
-  filter(date_num >= "1998-05-11")
+  mutate(date_num = as.Date(date_num)) %>%
+  filter(date_num >= "1998-05-11") 
 
 "
 Merge full info back into the matched articles
 "
 matched_extra <- inner_join(matched_data, select(full_df, date_num, headline, main_text, section, author))
 
+matched_extra %>%
+  mutate(section_name = tolower(str_remove(str_remove(section, "SECTION: "), "; Pg\\. [0-9]+"))) %>%
+  tabyl(section_name)
 
+             
 
 extra_vars <- matched_extra %>%
   select(date_num, Code, article_id, headline, section, author) %>%
+  mutate(section_name = str_squish(tolower(str_remove(str_remove(section, "SECTION: "), "; Pg\\. [0-9]+")))) %>%
   mutate(page = str_extract(section, "Pg\\. [0-9]+")) %>%
   mutate(page_no = case_when(str_detect(page, "[0-9]+") ~ as.numeric(str_extract(page, "[0-9]+")), 
          TRUE ~ 999999)) %>% 
@@ -105,7 +115,7 @@ extra_vars <- matched_extra %>%
   rename(Date = date_num) %>% mutate(Date = as.Date(Date)) %>%
   group_by(Code, Date) %>%
   summarise(page_no = case_when(any(page_no != 999999) ~ min(page_no, na.rm = T), TRUE ~ NA_real_),
-            author_identified = mean(author_identified, na.rm = T)) %>%
+            author_identified = mean(author_identified, na.rm = T), section_name = paste(section_name, collapse = ", ")) %>%
   ungroup() %>%
   left_join(online_articles, by = c("Code", "Date"), values) %>%
   right_join(select(BTR_data, Code, Date, mention)) %>%
@@ -119,7 +129,7 @@ extra_vars <- matched_extra %>%
          closeness_online_yday_mean = replace_na(mention*closeness_online_yday_mean, 0)) %>%
   select(-mention)
 
-tabyl(is.na(extra_vars$online_found_max))
+tabyl(extra_varsauthor_identified> 0)
 
 new_data <- BTR_data %>%
   left_join(extra_vars, by = c("Code", "Date")) %>%
@@ -127,10 +137,14 @@ new_data <- BTR_data %>%
 
 new_data %>%
   tabyl(online_found_max, online_today_max, online_yday_max)
-table(new_data$frontpage)
+tabyl(new_data, mention, frontpage)
 
 mean(new_data$highlow)
 
+
+saveRDS(new_data, "/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/JFM_rev_data.rds")
+
+new_data1 <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/JFM_rev_data.rds")
 
 "
 New analysis
@@ -153,10 +167,41 @@ new_data %>%
   mutate(extra_movement = 0.001*market_value/1e3) %>%
   group_by(year) %>%
   summarise(extra_movement = sum(extra_movement, na.rm = T)/252, extra_vol = sum(extra_vol, na.rm = T)/252)
+
+### Change number of DK lags
+model <- felm_DK_se(highlow ~ mention + frontpage + abs_overnight + 
+                      VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                      VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                      highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                      highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                      lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                      lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                      abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                      abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                      return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                      return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                      | Code + period, 
+                    new_data, nlags = 3)
+summary(model)
+model <- felm_DK_se(highlow ~ mention+ abs_overnight + 
+                      VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                      VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                      highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                      highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                      lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                      lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                      abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                      abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                      return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                      return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                    | Code + period, 
+                    new_data, nlags = 12)
+summary(model)
+
   
 
 model <- felm_DK_se(highlow ~ mention*author_identified-author_identified + highlow_1lag + abs_overnight + 
-                       VI_put_1lag + VI_call_1lag| Code + period, new_data)
+                       VI_put_1lag + VI_call_1lag| Code + period, new_data, nlags )
 summary(model)
 model <- felm_DK_se(highlow ~ mention*frontpage-frontpage + highlow_1lag + abs_overnight + 
                       VI_put_1lag + VI_call_1lag| Code + period, new_data)
