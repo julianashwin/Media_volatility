@@ -15,9 +15,6 @@ import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
 all_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
 
-all_data %>%
-  group_by(NACE_code, )
-
 
 # Import the NACE bridging table
 bridging <- read.csv("/Users/julianashwin/Documents/DPhil/Raw_Data/UK_macro/input-output/Translating_IO_to_NACE.csv", 

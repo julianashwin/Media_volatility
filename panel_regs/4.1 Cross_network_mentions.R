@@ -9,12 +9,20 @@ require(reshape2)
 require(stringr)
 
 
+# Import the equity data 
+clean_dir <- "~/Documents/DPhil/Clean_Data"
+import_filename = paste(clean_dir, "FT/matched/BTR_FT_data.csv", sep = "/")
+BTR_data <- read.csv(import_filename, stringsAsFactors = FALSE)
 
+marketval_data <- BTR_data %>%
+  select(Code, Date, market_value) %>%
+  
+  
 clean_dir <- "~/Documents/DPhil/Clean_Data"
 clean_filename = paste(clean_dir, "FT/matched/cross_firm_mentions_data_NACE.csv", sep = "/")
 cross_firm_data <- read.csv(clean_filename, stringsAsFactors = FALSE)
 cross_firm_data$period <- as.integer(as.factor(cross_firm_data$Date))
-cross_firm_data <- pdata.frame(cross_firm_data, index = c("Code", "period"))
+#cross_firm_data <- pdata.frame(cross_firm_data, index = c("Code", "period"))
 cross_firm_data$Date <- as.Date(cross_firm_data$Date)
 cross_firm_data <- cross_firm_data[which(!is.na(cross_firm_data$Sector)),]
 
@@ -24,6 +32,8 @@ all_data <-  cross_firm_data[,c("Date", "Sector", "Code", "abs_intra_day", "high
                                 "own_sec_abs_intra", "own_sec_highlow", "own_sec_abs_intra_notme", 
                                 "own_sec_highlow_notme", "period")]
 
+all_data <- all_data %>%
+  left_join(marketval_data)
 
 # Import the input-output tables 
 import_filename <- paste0(clean_dir, "/UK_macro/input-output/ONS_mat_labels.csv")
@@ -54,8 +64,13 @@ summary(test)
 
 temp_data <- all_data
 temp_data_mention_avg <- all_data
+temp_data_wt <- all_data
+temp_data_mention_avg_wt <- all_data
+
 temp_data$Date <- as.character(temp_data$Date)
 temp_data_mention_avg$Date <- as.character(temp_data_mention_avg$Date)
+temp_data_wt$Date <- as.character(temp_data_wt$Date)
+temp_data_mention_avg_wt$Date <- as.character(temp_data_mention_avg_wt$Date)
 
 # Get separate variables for sector-by-sector shocks
 s = matrix_labels$x[5]
@@ -325,14 +340,20 @@ stargazer(model1, model4, model5, model6, model8, df = FALSE,
           title = "Spillover effect of media coverage with article variable", 
           table.placement = "H")
 
+weighted_mention_avg_df
+
 write.csv(weighted_mention_avg_df, str_c(clean_dir, "/FT/matched/weighted_mention_avg_full.csv"),
           row.names = F)
 
-weighted_mentions_short <- as_tibble(weighted_mention_avg_df) %>%
+weighted_mentions_short_old <- as_tibble(weighted_mention_avg_df) %>%
   select(Code, Date, Sector, N_sector, own_sec_mention, own_sec_mention_avg,
          own_sec_mention_notme, own_sec_mention_avg_notme,
          own_sec_highlow, own_sec_highlow_notme,cons_weighted_mention_avg,
          dem_weighted_mention_avg, placebo_weighted_mention_avg)
+
+weighted_mentions_short <- tibble(weighted_mentions_short)
+
+table(round(weighted_mentions_short_old$dem_weighted_mention_avg - weighted_mentions_short$dem_weighted_mention_avg, 8))
 
 write.csv(weighted_mentions_short, str_c(clean_dir, "/FT/matched/weighted_mention_avg.csv"),
           row.names = F)
