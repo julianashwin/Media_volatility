@@ -63,7 +63,7 @@ matched_data <- inner_join(NER_data, select(headline_data, article_id, Date, Cod
 matched_data %>%
   filter(!is.na(orgs_mentioned)) %>%
   mutate(Date_lag = as.Date(Date) - 1) %>%
-  select(article_id, Code, Date, Date_lag, Company, headline, orgs_mentioned) %>%
+  select(article_id, Code, Date, Date_lag, Company, headline, main_text, orgs_mentioned) %>%
   mutate(key_phrase = str_squish(str_replace_all(orgs_mentioned, "[^[:alpha:]]", " "))) %>%
   write.csv("selenium_factiva/article_info.csv", row.names = F)
 
@@ -72,18 +72,35 @@ matched_data %>%
   unique() 
 
 # Import the data that's since been matched to the online articles
-online_article_info <- read_csv("selenium_factiva/article_info_matched.csv")
+online_article_info <- readRDS("selenium_factiva/article_info_matched.rds")
 
 online_articles <- online_article_info %>%
   mutate(online_found = as.numeric(online_found == "Yes"),
          online_today = replace_na(online_today, 0), online_yday = replace_na(online_yday, 0),
-         closeness_online_today = replace_na(closeness_online_today, 0), closeness_online_yday = replace_na(closeness_online_yday, 0)) %>%
+         closeness_online_headline_today = replace_na(closeness_online_headline_today, 0), 
+         closest_online_headline_today = replace_na(closest_online_headline_today, ""), 
+         closeness_online_headline_yday = replace_na(closeness_online_headline_yday, 0),
+         closest_online_headline_yday = replace_na(closest_online_headline_yday, ""),
+         closeness_online_text_today = replace_na(closeness_online_text_today, 0), 
+         closest_online_text_today = replace_na(closest_online_text_today, ""), 
+         closeness_online_text_yday = replace_na(closeness_online_text_yday, 0),
+         closest_online_text_yday = replace_na(closest_online_text_yday, "")) %>%
   group_by(Code, Date) %>%
   summarise(online_found_max = max(online_found), online_found_mean = mean(online_found),
             online_today_max = max(online_today), online_today_mean = mean(online_today),
             online_yday_max = max(online_yday), online_yday_mean = mean(online_yday),
-            closeness_online_today_max  = max(closeness_online_today), closeness_online_today_mean = mean(closeness_online_today),
-            closeness_online_yday_max  = max(closeness_online_yday), closeness_online_yday_mean = mean(closeness_online_yday))
+            closeness_online_headline_today_max  = max(closeness_online_headline_today), 
+            closeness_online_headline_today_mean = mean(closeness_online_headline_today),
+            closeness_online_headline_yday_max  = max(closeness_online_headline_yday), 
+            closeness_online_headline_yday_mean = mean(closeness_online_headline_yday),
+            closeness_online_text_today_max  = max(closeness_online_text_today), 
+            closeness_online_text_today_mean = mean(closeness_online_text_today),
+            closeness_online_text_yday_max  = max(closeness_online_text_yday), 
+            closeness_online_text_yday_mean = mean(closeness_online_text_yday),
+            closest_online_headline_today = paste0(closest_online_headline_today, collapse = " ~~~ "),
+            closest_online_headline_yday = paste0(closest_online_headline_yday, collapse = " ~~~ "),
+            closest_online_text_today = paste0(closest_online_text_today, collapse = " ~~~ "),
+            closest_online_text_yday = paste0(closest_online_text_yday, collapse = " ~~~ "))
 
 
 "
@@ -123,13 +140,17 @@ extra_vars <- matched_extra %>%
          online_found_max = replace_na(mention*online_found_max, 0), online_found_mean = replace_na(mention*online_found_mean, 0),
          online_today_max = replace_na(mention*online_today_max, 0), online_today_mean = replace_na(mention*online_today_mean, 0),
          online_yday_max = replace_na(mention*online_yday_max, 0), online_yday_mean = replace_na(mention*online_yday_mean, 0),
-         closeness_online_today_max = replace_na(mention*closeness_online_today_max, 0), 
-         closeness_online_today_mean = replace_na(mention*closeness_online_today_mean, 0),
-         closeness_online_yday_max = replace_na(mention*closeness_online_yday_max, 0), 
-         closeness_online_yday_mean = replace_na(mention*closeness_online_yday_mean, 0)) %>%
+         closeness_online_headline_today_max = replace_na(mention*closeness_online_headline_today_max, 0), 
+         closeness_online_headline_today_mean = replace_na(mention*closeness_online_headline_today_mean, 0),
+         closeness_online_headline_yday_max = replace_na(mention*closeness_online_headline_yday_max, 0), 
+         closeness_online_headline_yday_mean = replace_na(mention*closeness_online_headline_yday_mean, 0),
+         closeness_online_text_today_max = replace_na(mention*closeness_online_text_today_max, 0), 
+         closeness_online_text_today_mean = replace_na(mention*closeness_online_text_today_mean, 0),
+         closeness_online_text_yday_max = replace_na(mention*closeness_online_text_yday_max, 0), 
+         closeness_online_text_yday_mean = replace_na(mention*closeness_online_text_yday_mean, 0)) %>%
   select(-mention)
 
-tabyl(extra_varsauthor_identified> 0)
+tabyl(extra_vars,author_identified)
 
 new_data <- BTR_data %>%
   left_join(extra_vars, by = c("Code", "Date")) %>%

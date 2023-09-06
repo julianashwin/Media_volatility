@@ -5,7 +5,8 @@ library(janitor)
 library(lfe)
 library(fixest)
 library(lubridate)
-
+library(tictoc)
+library(stargazer)
 
 
 
@@ -34,8 +35,24 @@ get_quantile <- function(x, qnt, as_numeric = TRUE){
 }
 
 
+base_controls <- "abs_overnight + VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag"
+
+
 # Import data
 panel_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/JFM_rev_data.rds")
+
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + ", base_controls, "| Code + period")), panel_df)
+summary(model1)
+
 
 
 
@@ -43,7 +60,7 @@ panel_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_ver
 "
 Point 1 - Robustness with intraday volatility as sum of squared stock returns
 "
-### Still need bloody data from Refinitiv for this!!!!
+### see clean_intraday_data.R script for this
 
 
 
@@ -112,60 +129,210 @@ panel_df %>%
 "
 Point 3: How should we think about the possibility of new information in the FT?
 "
-panel_df <- panel_df %>%
-  mutate(report_comment = as.numeric(str_detect(section_name, "report|comment|analysis|opinoin|column")),
-         report_comment = replace_na(report_comment, 0)) %>%
-  mutate(mention_printonly = mention*(1-online_yday_max)) %>%
-  mutate(nwords = replace_na(str_count(main_text, " ") + 1, 0))
+
+## Get sentiment of online versions
+sentiment_df <- panel_df %>% 
+  filter(mention == 1) %>%
+  select(Code, Date, mention, headline, main_text, 
+         closest_online_headline_yday, closest_online_headline_today,
+         closest_online_text_yday, closest_online_text_today) %>%
+  mutate(main_text = replace_na(str_squish(main_text), ""),
+         headline = replace_na(str_squish(headline), ""),
+         closest_online_text_yday = replace_na(str_squish(closest_online_text_yday), ""),
+         closest_online_text_today = replace_na(str_squish(closest_online_text_today), ""),
+         closest_online_headline_yday = replace_na(str_squish(closest_online_headline_yday), ""),
+         closest_online_headline_today = replace_na(str_squish(closest_online_headline_today), ""),
+         LM_sentiment_main_text = NA_real_,
+         LM_sentiment_headline = NA_real_,
+         LM_sentiment_closest_online_text_yday = NA_real_,
+         LM_sentiment_closest_online_headline_yday = NA_real_,
+         LM_sentiment_closest_online_text_today = NA_real_,
+         LM_sentiment_closest_online_headline_today = NA_real_)
+
+library(SentimentAnalysis)
+pb = txtProgressBar(min = 1, max = nrow(sentiment_df), initial = 1) 
+for (ii in 1:nrow(sentiment_df)){
+  # Headline
+  if (sentiment_df$headline[ii] != ""){
+    para <- sentiment_df$headline[ii]
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_headline[ii] <- lm_sentiment[1,1]
+  } 
+  # Main text
+  if (sentiment_df$main_text[ii] != ""){
+    para <- str_sub(sentiment_df$main_text[ii], 1,1200)
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_main_text[ii] <- lm_sentiment[1,1]
+  } 
+  # Closest online headline yday
+  if (sentiment_df$closest_online_headline_yday[ii] != ""){
+    para <- sentiment_df$closest_online_headline_yday[ii]
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_closest_online_headline_yday[ii] <- lm_sentiment[1,1]
+  } 
+  # Closest online main text yday
+  if (sentiment_df$closest_online_text_yday[ii] != ""){
+    para <- sentiment_df$closest_online_text_yday[ii]
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_closest_online_text_yday[ii] <- lm_sentiment[1,1]
+  }
+  # Closest online headline today
+  if (sentiment_df$closest_online_headline_today[ii] != ""){
+    para <- sentiment_df$closest_online_headline_today[ii]
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_closest_online_headline_today[ii] <- lm_sentiment[1,1]
+  } 
+  # Closest online main text today
+  if (sentiment_df$closest_online_text_today[ii] != ""){
+    para <- sentiment_df$closest_online_text_today[ii]
+    lm_sentiment <- analyzeSentiment(para,rules=list("SentimentLM"=list(ruleSentiment,loadDictionaryLM())))
+    sentiment_df$LM_sentiment_closest_online_text_today[ii] <- lm_sentiment[1,1]
+  }
+  setTxtProgressBar(pb,ii)
+}
+sentiment_df <- sentiment_df %>%
+  mutate(main_text_nwords = replace_na(str_count(main_text, " "), 0),
+         headline_nwords = replace_na(str_count(headline, " "), 0),
+         main_text_closest_yday_nwords = replace_na(str_count(closest_online_text_yday, " "), 0),
+         headline_nwords_closest_yday = replace_na(str_count(closest_online_headline_yday, " "), 0),
+         main_text_closest_today_nwords = replace_na(str_count(closest_online_text_today, " "), 0),
+         headline_nwords_closest_today = replace_na(str_count(closest_online_headline_today, " "), 0))
 
 
-tabyl(panel_df$section_name)
+### Similarity of online and print editions. 
+if (FALSE){
+  library(doc2vec)
+  library(lsa)
+  doc2vec_df <- sentiment_df %>%
+    select(Code, Date, headline, main_text, closest_online_headline_yday, closest_online_headline_today, 
+           closest_online_text_today, closest_online_text_yday) %>%
+    pivot_longer(cols = -c(Code, Date), names_to = "type", values_to = "text") %>%
+    filter(text != "") %>%
+    mutate(text = str_sub(text, 1, 5000)) %>%
+    mutate(doc_id = str_c(Code, "**", Date, "**", type)) %>%
+    select(doc_id, text)
+  doc2vec_df
+  
+  tic() 
+  doc2vec_model <- paragraph2vec(doc2vec_df, type = "PV-DM", dim = 100, iter = 50)
+  toc()
+  
+  # Extract and merge embedding vectors back in 
+  embeddings <- as.data.frame(as.matrix(doc2vec_model, which = "docs"))
+  embeddings$doc_id <- rownames(embeddings)
+  embeddings <- embeddings %>%
+    tibble() %>% relocate(doc_id, .before = V1)
+  
+  embeddings_df <- doc2vec_df %>%
+    left_join(tibble(embeddings)) %>%
+    separate(doc_id, into = c("Code", "Date", "type"), sep = "\\*\\*") %>%
+    pivot_longer(cols = `V1`:`V100`) %>%
+    arrange(Code, Date, type) %>%
+    pivot_wider(id_cols = c(Code, Date, name), names_from = type, values_from = value)
+  
+  
+  saveRDS(embeddings_df, "/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/article_embeddings.rds")
+  
+}
 
-base_controls <- "abs_overnight + VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                       VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag"
+embeddings_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/article_embeddings.rds")
 
-### Look at the effect of different types of article
-# Baseline
-model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + ", base_controls, "| Code + period")), panel_df)
-summary(model1)
-
-model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + author_identified + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model2)
-
-model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + report_comment + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model2)
+similarity_df <- embeddings_df %>%
+  group_by(Code, Date) %>%
+  summarise(headline_main_print = cosine(headline, main_text)[1],
+            headline_headline_yday = cosine(headline, closest_online_headline_yday)[1],
+            main_main_yday = cosine(main_text, closest_online_text_yday)[1],
+            headline_headline_today = cosine(headline, closest_online_headline_today)[1],
+            main_main_today = cosine(main_text, closest_online_text_today)[1]) %>%
+  mutate(Date = as.Date(Date)) %>%
+  left_join(sentiment_df)
 
 
-model2 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_max + mention_printonly + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model2)
+panel_online_df <- similarity_df %>%
+  select(Code, Date, headline_main_print, headline_headline_yday, main_main_yday, headline_headline_today, main_main_today,
+         LM_sentiment_headline, LM_sentiment_main_text, LM_sentiment_closest_online_headline_yday, LM_sentiment_closest_online_text_yday,
+         main_text_nwords, main_text_closest_yday_nwords) %>%
+  right_join(panel_df)
 
-model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + online_yday_max + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model2)
-model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + online_yday_mean + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model3)
-model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + online_today_max + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model3)
-model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + closeness_online_yday_mean + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model3)
 
-model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + log(1+nwords) + ", 
-                                      base_controls, "| Code + period")), panel_df)
-summary(model3)
+# Plot cosine similarity 
+panel_online_df %>%
+  filter(mention == 1) %>%
+  pivot_longer(cols = c(main_main_today, main_main_yday), names_to = "Combo", values_to = "similarity") %>%
+  mutate(Combo = case_when(Combo == "main_main_today" ~ "Same day", Combo == "main_main_yday" ~ "Previous day")) %>%
+  ggplot() + theme_bw() + 
+  geom_histogram(aes(x = similarity, group = Combo, fill = Combo), position = "dodge") +
+  labs(x = "Cosine similarity of online and print article", y = "Count", 
+       fill = "Matched online article")
+ggsave("figures/online_article_similarity.pdf", width = 5, height = 3.5)
+
+# How many matches?
+tabyl(panel_online_df$mention[panel_online_df$Date > "2000-09-01"])
+tabyl(panel_online_df$online_today_max)
+tabyl(panel_online_df$online_yday_max)
+
+# Some examples
+similarity_df[9892,]
+as.character(similarity_df$headline[9892])
+as.character(similarity_df$main_text[9892])
+as.character(similarity_df$closest_online_headline_yday[9892])
+as.character(similarity_df$closest_online_text_yday[9892])
+similarity_df$main_main_yday[9892]
+
+
+panel_online_df <- panel_online_df %>%
+  mutate(online_yday_0p6 = replace_na(online_yday_max*(main_main_yday >= 0.6), 0),
+         online_yday_0p65 = replace_na(online_yday_max*(main_main_yday >= 0.65), 0),
+         online_yday_0p7 = replace_na(online_yday_max*(main_main_yday >= 0.7), 0),
+         online_yday_0p75 = replace_na(online_yday_max*(main_main_yday >= 0.75), 0),
+         online_yday_0p8 = replace_na(online_yday_max*(main_main_yday >= 0.8), 0),
+         online_yday_0p85 = replace_na(online_yday_max*(main_main_yday >= 0.85), 0),
+         online_yday_0p9 = replace_na(online_yday_max*(main_main_yday >= 0.9), 0),
+         online_yday_0p95 = replace_na(online_yday_max*(main_main_yday >= 0.95), 0))
+
+panel_online_df %>%
+  ungroup() %>%
+  summarise(online_yday_0p6 = sum(online_yday_0p6), online_yday_0p65 = sum(online_yday_0p65), 
+            online_yday_0p7 = sum(online_yday_0p7), online_yday_0p75 = sum(online_yday_0p75), 
+            online_yday_0p8 = sum(online_yday_0p8), online_yday_0p85 = sum(online_yday_0p85), 
+            online_yday_0p9 = sum(online_yday_0p9), online_yday_0p95 = sum(online_yday_0p95)) %>%
+  pivot_longer(everything()) %>%
+  mutate(name = as.numeric(str_replace(str_remove(name, "online_yday_"), "p", "."))) %>%
+  ggplot() + theme_bw() + 
+  geom_line(aes(x = name, y = value))
+
+## Effect with different similarity thresholds 
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + ", base_controls, "| Code + period")), panel_online_df)
+model2 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_max + ", base_controls, "| Code + period")), panel_online_df)
+model3 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p6 + ", base_controls, "| Code + period")), panel_online_df)
+model4 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p65 + ", base_controls, "| Code + period")), panel_online_df)
+model5 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p7 + ", base_controls, "| Code + period")), panel_online_df)
+model6 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p75 + ", base_controls, "| Code + period")), panel_online_df)
+model7 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p8 + ", base_controls, "| Code + period")), panel_online_df)
+model8 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p85 + ", base_controls, "| Code + period")), panel_online_df)
+model9 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p9 + ", base_controls, "| Code + period")), panel_online_df)
+model10 <- felm_DK_se(as.formula(str_c("highlow ~ online_yday_0p95 + ", base_controls, "| Code + period")), panel_online_df)
+summary(model10)
+
+online_coefs <- tibble(as.data.frame(rbind(c("Baseline",summary(model1)$coefficients["mention",]),
+                      c("None",summary(model2)$coefficients["online_yday_max",]),
+                      c("0.6",summary(model3)$coefficients["online_yday_0p6",]),
+                      c("0.7",summary(model5)$coefficients["online_yday_0p7",]),
+                      c("0.8",summary(model7)$coefficients["online_yday_0p8",]),
+                      c("0.9",summary(model9)$coefficients["online_yday_0p9",]))))
+
+online_coefs %>%
+  mutate(coef = as.numeric(Estimate), se = as.numeric(`Std. Error`)) %>%
+  mutate(model = factor(V1, ordered = T, levels = c("Baseline", "None", "0.6", "0.7", "0.8", "0.9"))) %>%
+  ggplot() + theme_bw() + 
+  geom_point(aes(x = model, y = coef)) + 
+  geom_errorbar(aes(x = model, ymin = coef - 1.96*se, ymax = coef + 1.96*se), width=.3) + 
+  geom_hline(aes(yintercept = 0), linetype = "dashed") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Similarity threshold", y = "Article effect")
+ggsave("figures/online_article_effects.pdf", width = 3, height = 3.5)
+
+
 
 
 
@@ -267,6 +434,15 @@ weighted_mentions_short <- read_csv("~/Documents/DPhil/Clean_Data//FT/matched/we
   dplyr::select(Code, Date, own_sec_mention_notme_old, own_sec_mention_avg_notme_old, cons_weighted_mention_avg_old,
                  dem_weighted_mention_avg_old, placebo_weighted_mention_avg_old, own_sec_highlow_notme_old)
 
+
+panel_df %>% 
+  group_by(Code) %>% 
+  summarise(market_value = mean(market_value, na.rm = T),
+            lmarket_value = mean(lmarket_value, na.rm = T)) %>%
+  ggplot() + theme_bw() + 
+  geom_density(aes(x = lmarket_value))
+
+
 # Get within sector variables
 sector_df <- panel_df %>%
   group_by(Date, Sector) %>%
@@ -314,138 +490,86 @@ panel_spillover_df <- panel_df %>%
          own_sec_mention_avg_wt_notme = 
            case_when(market_value_sector > 0 ~ (mention_sum_wt - mention*market_value)/market_value_sector, 
                      TRUE ~ NA_real_),
-         own_sec_mention_max_notme = as.numeric(own_sec_mention_avg_notme > 0))
+         own_sec_mention_max_notme = as.numeric(own_sec_mention_avg_notme > 0),
+         own_sec_highlow_avg_notme = (highlow_sum - highlow)/N_sector,
+         own_sec_highlow_avg_wt_notme = highlow_avg_wt - (highlow*market_value)/market_value_sector)
 
 
 # Baseline
-model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + 
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), panel_spillover_df)
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention +", base_controls, "| Code + Date")), panel_spillover_df)
 # Only cons
-model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + cons_weighted_mention_avg_old +
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), 
-               panel_spillover_df)
+model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + cons_weighted_mention_avg_old + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
 # Only dem
-model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_weighted_mention_avg_old +
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), 
-               panel_spillover_df)
+model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_weighted_mention_avg_old + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
 # Both
-model4 <- felm_DK_se(as.formula(str_c("highlow ~ mention +  dem_weighted_mention_avg_old + cons_weighted_mention_avg_old +
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), 
-               panel_spillover_df)
+model4 <- felm_DK_se(as.formula(str_c("highlow ~ mention +  dem_weighted_mention_avg_old + cons_weighted_mention_avg_old + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
 # Both plus own sector
-model5 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_weighted_mention_avg_old + cons_weighted_mention_avg_old +
-                 own_sec_mention_avg_notme_old  +
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), 
-               panel_spillover_df)
+model5 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_weighted_mention_avg_old + cons_weighted_mention_avg_old + 
+                                      own_sec_mention_avg_notme_old + ", base_controls, "| Code + Date")),  panel_spillover_df)
 # Both, own sec mention and vol
 model6 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_weighted_mention_avg_old + cons_weighted_mention_avg_old +
-                 + own_sec_mention_avg_notme_old + own_sec_highlow_notme_old +
-                 abs_overnight + 
-                 VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-                 VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-                 highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-                 highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-                 lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-                 lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-                 abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-                 abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-                 return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-                 return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
-               | Code + Date")), 
-              panel_spillover_df)
-summary(model6) 
+                 + own_sec_mention_avg_notme_old + own_sec_highlow_notme_old + ", base_controls, "| Code + Date")), panel_spillover_df)
+# Both, own sec mention and vol
+model7 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_ntwk_mention_avg_wt + cons_ntwk_mention_avg_wt +
+                 + own_sec_mention_avg_wt_notme + own_sec_highlow_avg_wt_notme + ", base_controls, "| Code + Date")), panel_spillover_df)
+summary(model7) 
 
+stargazer(model1, model2, model3, model4, model5, model6, model7,
+          table.placement = "H", df = F) 
+
+
+# Baseline
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention +", base_controls, "| Code + Date")), panel_spillover_df)
+# Only cons
+model2 <- felm_DK_se(as.formula(str_c("highlow ~ mention + cons_ntwk_mention_avg_wt + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
+# Only dem
+model3 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_ntwk_mention_avg_wt + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
+# Both
+model4 <- felm_DK_se(as.formula(str_c("highlow ~ mention +  dem_ntwk_mention_avg_wt + cons_ntwk_mention_avg_wt + ", 
+                                      base_controls, "| Code + Date")), panel_spillover_df)
+# Both plus own sector
+model5 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_ntwk_mention_avg_wt + cons_ntwk_mention_avg_wt + 
+                                      own_sec_mention_avg_wt_notme + ", base_controls, "| Code + Date")),  panel_spillover_df)
+# Both, own sec mention and vol
+model6 <- felm_DK_se(as.formula(str_c("highlow ~ mention + dem_ntwk_mention_avg_wt + cons_ntwk_mention_avg_wt +
+                 + own_sec_mention_avg_wt_notme + own_sec_highlow_avg_wt_notme + ", base_controls, "| Code + Date")), panel_spillover_df)
+summary(model6) 
 stargazer(model1, model2, model3, model4, model5, model6,
           table.placement = "H", df = F) 
 
 
-model = felm(highlow ~ mention + cons_ntwk_mention_avg + dem_ntwk_mention_avg + own_sec_mention_avg_notme + 
-               abs_overnight + 
-               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag 
-              | Code + Date, data = panel_spillover_df)
-summary(model)
-model = felm(highlow ~ mention + cons_ntwk_mention_avg + dem_ntwk_mention_avg + 
-               abs_overnight + 
-               VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
-               VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
-               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
-               lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
-               lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
-               abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
-               abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
-               return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
-               return_6lag + return_7lag + return_8lag + return_9lag + return_10lag |
-               Code + period, data = panel_df)
-summary(model)
-model = felm(highlow ~ mention + own_sec_mention_value_notme + 
-               highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
-               highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag| Code + Date, data = panel_df)
-summary(model)
+
+### Index level effect
+index_data <- panel_df %>%
+  group_by(Date) %>%
+  summarise(mention_weighted = sum(market_value_1lag*mention, na.rm = T)/sum(market_value_1lag, na.rm = T),
+            mention = mean(mention, na.rm = T), 
+            index_val = sum(market_value, na.rm = T), 
+            IndexHighLow = mean(IndexHighLow, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(IndexHighLow_1lag = lag(IndexHighLow, order_by = Date))
+
+cor.test(index_data$mention, index_data$mention_weighted)
+
+ggplot(index_data) + 
+  geom_line(aes(x = as.Date(Date), y = mention*100, color = "mention")) + 
+  geom_line(aes(x = as.Date(Date), y = mention_weighted*100, color = "mention_wt")) + 
+  geom_line(aes(x = as.Date(Date), y = IndexHighLow, color = "highlow"))
+
+model1 <- lm(IndexHighLow ~ mention, index_data)
+model2 <- lm(IndexHighLow ~ mention + IndexHighLow_1lag, index_data) 
+model3 <- lm(IndexHighLow ~ mention_weighted + IndexHighLow_1lag, index_data) 
+stargazer(model1, model2, model3, table.placement = "H", df = F)
+
+
+
+
+
 
 
 "
@@ -458,8 +582,62 @@ Point 9 - Descriptions for tables and figures
 "
 
 "
-Point 10 - front page 
+Point 10 - front page (and number of trades)
 "
+panel_ntrades_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/panel_intraday_df.rds") %>%
+  rename(NumTrades = NumTrades_60min) %>%
+  select(Code, Date, NumTrades) %>% 
+  right_join(panel_df) %>%
+  arrange(Code, Date) %>%
+  mutate(otherpages = mention - frontpage,
+         lNumTrades = log(NumTrades),
+         AvTrade = Volume/NumTrades,
+         lAvTrade = log(Volume/NumTrades))
+
+
+
+## Baseline model
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + ", base_controls, "| Code + period")), panel_ntrades_df)
+model2 <- felm_DK_se(as.formula(str_c("lVolume ~ mention + ", base_controls, "| Code + period")), panel_ntrades_df)
+model3 <- felm_DK_se(as.formula(str_c("abs_intra_day ~ mention + ", base_controls, "| Code + period")), panel_ntrades_df)
+model4 <- felm_DK_se(as.formula(str_c("highlow ~ mention + abs_intra_day + ", base_controls, "|Code + period")), panel_ntrades_df)
+model5 <- felm_DK_se(as.formula(str_c("highlow ~ mention + lVolume +  ", base_controls, "|Code + period")), panel_ntrades_df)
+model6 <- felm_DK_se(as.formula(str_c("highlow ~ mention + abs_intra_day + lVolume +  ", base_controls, "|Code + period")), panel_ntrades_df)
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F)
+
+
+
+## Baseline model
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ frontpage + otherpages + ", base_controls, "| Code + period")), panel_ntrades_df)
+model2 <- felm_DK_se(as.formula(str_c("lVolume ~ frontpage + otherpages + ", base_controls, "| Code + period")), panel_ntrades_df)
+model3 <- felm_DK_se(as.formula(str_c("abs_intra_day ~ frontpage + otherpages + ", base_controls, "| Code + period")), panel_ntrades_df)
+model4 <- felm_DK_se(as.formula(str_c("highlow ~ frontpage + abs_intra_day + otherpages + ", base_controls, "|Code + period")), panel_ntrades_df)
+model5 <- felm_DK_se(as.formula(str_c("highlow ~ frontpage + lVolume + otherpages + ", base_controls, "|Code + period")), panel_ntrades_df)
+model6 <- felm_DK_se(as.formula(str_c("highlow ~ frontpage + abs_intra_day + lVolume + otherpages + ", base_controls, "|Code + period")), panel_ntrades_df)
+stargazer(model1, model2, model3, model4, model5, model6,
+          table.placement = "H", df = F)
+
+
+
+summary(model5)
+total_effect <- model1$coefficients["mention",]
+Volume_acme <- model2$coefficients["mention",]*model5$coefficients["lVolume",]
+return_acme <- model3$coefficients["mention",]*model4$coefficients["abs_intra_day",]
+Volume_direct_effect <- model5$coefficients["mention",]
+return_direct_effect <- model4$coefficients["mention",]
+
+Volume_acme/total_effect
+return_acme/total_effect
+
+
+
+panel_df %>%
+  tabyl(mention, frontpage)
+
+model1 <- felm_DK_se(as.formula(str_c("highlow ~ mention + ", base_controls, "| Code + Date")), panel_spillover_df)
+summary(model1)
+
 model <- felm_DK_se(highlow ~ mention + frontpage + highlow_1lag + abs_overnight + 
                       VI_put_1lag + VI_call_1lag| Code + period, new_data)
 summary(model)
@@ -515,8 +693,6 @@ select(full_df, date_num, headline, section, author) %>%
 matched_articles <- as_tibble(read.csv("/Users/julianashwin/Documents/DPhil/Clean_Data/FT/matched/short_articles.csv"))
 
 
-
-
 for (ii in 1:nrow(matched_articles)){
   
   hline <- matched_articles$headline[ii]
@@ -550,6 +726,14 @@ matched_articles %>%
 
 
 full_df$section[1:10]
+
+
+
+
+"
+Additional exercise - number of trades
+"
+panel_intraday_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/panel_intraday_df.rds")
 
 
 BATS_df <- as_tibble(read.csv("/Users/julianashwin/Downloads/BATS.L_intraday.csv")) %>%

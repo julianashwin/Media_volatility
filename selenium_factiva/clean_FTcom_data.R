@@ -83,8 +83,10 @@ article_info <- read_csv("selenium_factiva/article_info.csv") %>%
   left_join(select(meta_df, article_id, save_time, online_found)) %>% 
   mutate(online_today = NA, online_yday = NA,
     closest_online_headline_today = NA, closest_online_headline_yday = NA,
-    closeness_online_today = NA, closeness_online_yday = NA, nomatch = NA,
-    online_found = replace_na(online_found, "No"))
+    closest_online_text_today = NA, closest_online_text_yday = NA,
+    closeness_online_headline_today = NA, closeness_online_headline_yday = NA, 
+    closeness_online_text_today = NA, closeness_online_text_yday = NA, 
+    nomatch = NA, online_found = replace_na(online_found, "No"))
   
 
 ### Loop through each article and see if there's an online equivalent
@@ -102,6 +104,9 @@ for (ii in 1:nrow(article_info)){
     # Extract headline and all words
     headline <- tolower(article_info$headline[ii])
     headline_words <- str_split(gsub("[^a-z0-9 ]", "", headline), " ")[[1]]
+    main_text <- tolower(article_info$main_text[ii])
+    main_text_words <- str_split(gsub("[^a-z0-9 ]", "", main_text), " ")[[1]]
+    
     
     savetime <- article_info$save_time[ii] - hours(1) # Adjust for timezone of LBS network and local files
     savetime_alt <- article_info$save_time[ii] - hours(1) - minutes(1) # Adjust for timezone of LBS network and local files
@@ -116,14 +121,21 @@ for (ii in 1:nrow(article_info)){
       filter(date >= yday & date <= today) %>%
       filter(str_detect(file_id, predicted_filename) | str_detect(file_id, predicted_filename_alt)) %>%
       mutate(headline_clean = str_squish(gsub("[^a-z0-9 ]", "", tolower(headline))),
-             company_match = as.numeric(str_detect(headline_clean, company)), closeness = NA)
+             main_text_clean = str_squish(gsub("[^a-z0-9 ]", "", tolower(main_text))),
+             company_match = as.numeric(str_detect(headline_clean, company)), 
+             closeness_headline = NA,
+             closeness_main_text = NA)
     
     
     if (nrow(mini_df) > 0){
       article_info$nomatch[ii] <- 0
       for (jj in 1:nrow(mini_df)){
+        # Headline
         headline_candidate <- str_split(mini_df$headline_clean[jj], " ")[[1]]
-        mini_df$closeness[jj] <- length(intersect(headline_words, headline_candidate))/length(headline_candidate)
+        mini_df$closeness_headline[jj] <- length(intersect(headline_words, headline_candidate))/length(headline_candidate)
+        # Main text
+        main_text_candidate <- str_split(mini_df$main_text_clean[jj], " ")[[1]]
+        mini_df$closeness_main_text[jj] <- length(intersect(main_text_words, main_text_candidate))/length(main_text_candidate)
       }
       # Pull out today and yesterday
       mini_today <- mini_df[which(mini_df$date == today),]
@@ -133,15 +145,21 @@ for (ii in 1:nrow(article_info)){
       article_info$online_yday[ii] <- as.numeric(any(mini_yday$company_match == 1))
       # Today's match details
       if (nrow(mini_today) > 0){
-        article_info$closest_online_headline_today[ii] <- paste(mini_today$headline[which(mini_today$closeness == max(mini_today$closeness) &
-                                                                                            mini_today$closeness > 0)], collapse = "; ")
-        article_info$closeness_online_today[ii] <-   max(mini_today$closeness) 
+        article_info$closest_online_headline_today[ii] <- paste(mini_today$headline[which(mini_today$closeness_headline == max(mini_today$closeness_headline) &
+                                                                                            mini_today$closeness_headline > 0)], collapse = "; ")
+        article_info$closeness_online_headline_today[ii] <-   max(mini_today$closeness_headline) 
+        article_info$closest_online_text_today[ii] <- paste(mini_today$main_text[which(mini_today$closeness_main_text == max(mini_today$closeness_main_text) &
+                                                                                            mini_today$closeness_main_text > 0)], collapse = "; ")
+        article_info$closeness_online_text_today[ii] <-   max(mini_today$closeness_main_text) 
       }
       # Yesterday's match details
       if (nrow(mini_yday) > 0){
-        article_info$closest_online_headline_yday[ii] <- paste(mini_yday$headline[which(mini_yday$closeness == max(mini_yday$closeness) &
-                                                                                           mini_yday$closeness > 0)], collapse = "; ")
-        article_info$closeness_online_yday[ii] <-   max(mini_yday$closeness) 
+        article_info$closest_online_headline_yday[ii] <- paste(mini_yday$headline[which(mini_yday$closeness_headline == max(mini_yday$closeness_headline) &
+                                                                                          mini_yday$closeness_headline > 0)], collapse = "; ")
+        article_info$closeness_online_headline_yday[ii] <-   max(mini_yday$closeness_headline) 
+        article_info$closest_online_text_yday[ii] <- paste(mini_yday$main_text[which(mini_yday$closeness_main_text == max(mini_yday$closeness_main_text) &
+                                                                                       mini_yday$closeness_main_text > 0)], collapse = "; ")
+        article_info$closeness_online_text_yday[ii] <-   max(mini_yday$closeness_main_text)
       }
     } else {
       article_info$nomatch[ii] <- 1
@@ -156,4 +174,5 @@ beep()
 article_info <- article_info %>%
   distinct()
 
-write_csv(article_info, "selenium_factiva/article_info_matched.csv")
+saveRDS(article_info, "selenium_factiva/article_info_matched.rds")
+#article_info <- readRDS("selenium_factiva/article_info_matched.rds")
