@@ -496,34 +496,69 @@ summary(model)
 Look at effect throughout the day
 "
 
+intraday_30min_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/intraday_30min_data_clean.rds")
+intraday_60min_df <- readRDS("/Users/julianashwin/Documents/DPhil/Firm_level_news/JFM_version/data/intraday_60min_data_clean.rds")
+
 intraday_30min_df1 <- intraday_30min_df %>%
   left_join(panel_df) %>%
   mutate(time = str_c(hour,":",minute),
-         absreturn_30min_oc = abs(return_30min_oc),
-         absreturn_30min_cc = abs(return_30min_cc),
          abslogreturn_30min_oc = abs(log_return_30min_oc),
-         abslogreturn_30min_cc = abs(log_return_30min_cc))
-intraday_30min_df1 <- intraday_30min_df1 %>%
-  mutate(sqlogreturn_30min_oc = (abslogreturn_30min_oc)^2)
-
+         sqlogreturn_30min_oc = (abslogreturn_30min_oc)^2) %>%
+  relocate(time, .after = Date) %>%
+  group_by(Code, time) %>%
+  mutate(abslogreturn_30min_oc_1lag = dplyr::lag(abslogreturn_30min_oc, n = 1, order_by = Date),
+         abslogreturn_30min_oc_2lag = dplyr::lag(abslogreturn_30min_oc, n = 2, order_by = Date),
+         abslogreturn_30min_oc_3lag = dplyr::lag(abslogreturn_30min_oc, n = 3, order_by = Date),
+         abslogreturn_30min_oc_4lag = dplyr::lag(abslogreturn_30min_oc, n = 4, order_by = Date),
+         sqlogreturn_30min_oc_1lag = dplyr::lag(sqlogreturn_30min_oc, n = 1,  order_by = Date),
+         sqlogreturn_30min_oc_2lag = dplyr::lag(sqlogreturn_30min_oc, n = 2,  order_by = Date),
+         sqlogreturn_30min_oc_3lag = dplyr::lag(sqlogreturn_30min_oc, n = 3,  order_by = Date),
+         sqlogreturn_30min_oc_4lag = dplyr::lag(sqlogreturn_30min_oc, n = 4,  order_by = Date)) 
+intraday_30min_df1 %>%
+  arrange(Code, time, Date) %>%
+  relocate(sqlogreturn_30min_oc, sqlogreturn_30min_oc_1lag, .after = Date) %>%
+  
+  
 
 intraday_60min_df1 <- intraday_60min_df %>%
   left_join(panel_df) %>%
   mutate(time = str_c(hour,":00"),
-         absreturn_60min_oc = abs(return_60min_oc),
-         absreturn_60min_cc = abs(return_60min_cc),
          abslogreturn_60min_oc = abs(log_return_60min_oc),
-         abslogreturn_60min_cc = abs(log_return_60min_cc),
-         sqlogreturn_60min_oc = (log_return_60min_oc)^2,
-         sqlogreturn_60min_cc = (log_return_60min_cc)^2)
+         sqlogreturn_60min_oc = (log_return_60min_oc)^2) %>%
+  relocate(time, .after = Date) %>%
+  group_by(Code, time) %>%
+  mutate(abslogreturn_60min_oc_1lag = lag(abslogreturn_60min_oc, n = 1, order_by = Date),
+         abslogreturn_60min_oc_2lag = lag(abslogreturn_60min_oc, n = 2, order_by = Date),
+         abslogreturn_60min_oc_3lag = lag(abslogreturn_60min_oc, n = 3, order_by = Date),
+         abslogreturn_60min_oc_4lag = lag(abslogreturn_60min_oc, n = 4, order_by = Date),
+         sqlogreturn_60min_oc_1lag = lag(sqlogreturn_60min_oc, n = 1, order_by = Date),
+         sqlogreturn_60min_oc_2lag = lag(sqlogreturn_60min_oc, n = 2, order_by = Date),
+         sqlogreturn_60min_oc_3lag = lag(sqlogreturn_60min_oc, n = 3, order_by = Date),
+         sqlogreturn_60min_oc_4lag = lag(sqlogreturn_60min_oc, n = 4, order_by = Date))
 
+
+
+times_30min <- unique(intraday_30min_df1$time)
+times_60min <- unique(intraday_60min_df1$time)
 
 model_30min <- felm_DK_se(as.formula(str_c("abslogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
-model_30minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
+model_30minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time:sqlogreturn_30min_oc_1lag +", controls_base, "| Code + period")), intraday_30min_df1)
 model_60min <- felm_DK_se(as.formula(str_c("abslogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
 model_60minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
 
 
+
+model_30min <- felm_DK_se(as.formula(str_c("abslogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
+model_30minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time*sqlogreturn_30min_oc_1lag +", controls_base, "| Code + period")), intraday_30min_df1)
+model_60min <- felm_DK_se(as.formula(str_c("abslogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
+model_60minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
+
+
+model_30min_1 <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ mention + sqlogreturn_30min_oc_1lag + 
+                                             VI_put_1lag + VI_call_1lag | Code + period")), 
+                            filter(intraday_30min_df1, time == times_30min[18]))
+
+intraday_30min_df1
 
 hourly_coefs <- tibble()
 # 30minsq

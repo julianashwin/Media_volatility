@@ -55,13 +55,13 @@ as_tibble(total_data) %>%
   ggplot(aes(x = report_count)) + theme_bw() + geom_histogram()
 
 as_tibble(total_data) %>%
-  filter(Code == "MCRO.L") %>%
+  filter(Code == "MCRO.L") %>% #, Date >="2011-01-01" & Date <= "2012-01-01") %>%
   mutate(Date = as.Date(Date)) %>%
-  ggplot(aes(x = Date, y = Close)) + theme_bw() + 
+  ggplot(aes(x = Date, y = highlow)) + theme_bw() + 
   geom_line() + 
   geom_vline(data = filter(total_data, mention == 1 & Code == "MCRO.L"),
              aes(xintercept=as.Date(Date)), color = "blue", linetype = "dashed") +
-  labs(y = "MCRO Price")
+  labs(y = "MCRO volatility")
 ggsave("figures/MCRO_price_mentions.pdf", width = 6, height = 2.5)
 
 
@@ -797,6 +797,49 @@ model3 <- felm_DK_se(highlow ~ mention*as.factor(lVolume_quart)-mention-as.facto
 stargazer(model1, model2, model3, 
           table.placement = "H", df = F)
 
+
+model1 <- felm_DK_se(highlow ~ mention*as.factor(lmarket_value_1lag_quart)-mention-as.factor(lmarket_value_1lag_quart) + 
+                       #abs_overnight +
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, model_df)
+model2 <- felm_DK_se(highlow ~ mention*as.factor(highlow_quart)-mention-as.factor(highlow_quart) + 
+                       #abs_overnight +
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, model_df)
+model3 <- felm_DK_se(highlow ~ mention*as.factor(lVolume_quart)-mention-as.factor(lVolume_quart) + 
+                       #abs_overnight +
+                       #VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
+                       #VI_call_1lag + VI_call_2lag + VI_call_3lag + VI_call_4lag + VI_call_5lag +
+                       highlow_1lag + highlow_2lag + highlow_3lag + highlow_4lag + highlow_5lag + 
+                       highlow_6lag + highlow_7lag + highlow_8lag + highlow_9lag + highlow_10lag +
+                       lVolume_1lag + lVolume_2lag + lVolume_3lag + lVolume_4lag + lVolume_5lag +
+                       lVolume_6lag + lVolume_7lag + lVolume_8lag + lVolume_9lag + lVolume_10lag + 
+                       abs_return_1lag + abs_return_2lag + abs_return_3lag + abs_return_4lag + abs_return_5lag +
+                       abs_return_6lag + abs_return_7lag + abs_return_8lag + abs_return_9lag + abs_return_10lag +
+                       return_1lag + return_2lag + return_3lag + return_4lag + return_5lag + 
+                       return_6lag + return_7lag + return_8lag + return_9lag + return_10lag
+                     |Code + period, model_df)
+stargazer(model1, model2, model3, 
+          table.placement = "H", df = F)
+
 model3 <- felm_DK_se(highlow ~ mention*as.factor(Economic)-mention-as.factor(lVolume_quart) + 
                        abs_overnight +
                        VI_put_1lag + VI_put_2lag + VI_put_3lag + VI_put_4lag + VI_put_5lag +
@@ -825,6 +868,11 @@ model3 <- felm_DK_se(highlow ~ mention*as.factor(Economic)-mention-as.factor(lVo
 Mediation effect
 mention -> lVolume -> highlow
 "
+
+model_df <- model_df[]
+med_vars <- c("highlow","mention","lVolume","highlow_1lag", "lVolume_1lag", "VI_put_1lag")
+model_df <- total_data[complete.cases(total_data[,med_vars]), which(!str_detect(names(total_data), "text"))]
+
 ## Baseline model
 model1 <- felm_DK_se(highlow ~ mention + 
                                 abs_overnight +
