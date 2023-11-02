@@ -517,7 +517,7 @@ intraday_30min_df1 <- intraday_30min_df %>%
 intraday_30min_df1 %>%
   arrange(Code, time, Date) %>%
   relocate(sqlogreturn_30min_oc, sqlogreturn_30min_oc_1lag, .after = Date) %>%
-  
+rm(intraday_30min_df)
   
 
 intraday_60min_df1 <- intraday_60min_df %>%
@@ -527,63 +527,76 @@ intraday_60min_df1 <- intraday_60min_df %>%
          sqlogreturn_60min_oc = (log_return_60min_oc)^2) %>%
   relocate(time, .after = Date) %>%
   group_by(Code, time) %>%
-  mutate(abslogreturn_60min_oc_1lag = lag(abslogreturn_60min_oc, n = 1, order_by = Date),
-         abslogreturn_60min_oc_2lag = lag(abslogreturn_60min_oc, n = 2, order_by = Date),
-         abslogreturn_60min_oc_3lag = lag(abslogreturn_60min_oc, n = 3, order_by = Date),
-         abslogreturn_60min_oc_4lag = lag(abslogreturn_60min_oc, n = 4, order_by = Date),
-         sqlogreturn_60min_oc_1lag = lag(sqlogreturn_60min_oc, n = 1, order_by = Date),
-         sqlogreturn_60min_oc_2lag = lag(sqlogreturn_60min_oc, n = 2, order_by = Date),
-         sqlogreturn_60min_oc_3lag = lag(sqlogreturn_60min_oc, n = 3, order_by = Date),
-         sqlogreturn_60min_oc_4lag = lag(sqlogreturn_60min_oc, n = 4, order_by = Date))
-
+  mutate(abslogreturn_60min_oc_1lag = dplyr::lag(abslogreturn_60min_oc, n = 1, order_by = Date),
+         abslogreturn_60min_oc_2lag = dplyr::lag(abslogreturn_60min_oc, n = 2, order_by = Date),
+         abslogreturn_60min_oc_3lag = dplyr::lag(abslogreturn_60min_oc, n = 3, order_by = Date),
+         abslogreturn_60min_oc_4lag = dplyr::lag(abslogreturn_60min_oc, n = 4, order_by = Date),
+         sqlogreturn_60min_oc_1lag = dplyr::lag(sqlogreturn_60min_oc, n = 1, order_by = Date),
+         sqlogreturn_60min_oc_2lag = dplyr::lag(sqlogreturn_60min_oc, n = 2, order_by = Date),
+         sqlogreturn_60min_oc_3lag = dplyr::lag(sqlogreturn_60min_oc, n = 3, order_by = Date),
+         sqlogreturn_60min_oc_4lag = dplyr::lag(sqlogreturn_60min_oc, n = 4, order_by = Date))
+rm(intraday_60min_df)
 
 
 times_30min <- unique(intraday_30min_df1$time)
 times_60min <- unique(intraday_60min_df1$time)
 
 model_30min <- felm_DK_se(as.formula(str_c("abslogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
-model_30minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time:sqlogreturn_30min_oc_1lag +", controls_base, "| Code + period")), intraday_30min_df1)
+model_30minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
 model_60min <- felm_DK_se(as.formula(str_c("abslogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
 model_60minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
+rm(model_30min, model_30minsq, model_60min, model_60minsq)
+
+model_30min_ <- felm_DK_se(as.formula(str_c("abslogreturn_30min_oc ~ time + time:mention + time:abslogreturn_30min_oc_1lag + 
+                                              time:abslogreturn_30min_oc_2lag + time:abslogreturn_30min_oc_3lag + time:abslogreturn_30min_oc_4lag +
+                                              ", controls_base, "| Code + period")), intraday_30min_df1)
+model_30min_ <- summary(model_30min_)
+gc()
+
+model_30minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time + time:mention + time:sqlogreturn_30min_oc_1lag + 
+                                              time:sqlogreturn_30min_oc_2lag + time:sqlogreturn_30min_oc_3lag + time:sqlogreturn_30min_oc_4lag +
+                                              ", controls_base, "| Code + period")), intraday_30min_df1)
+model_30minsq_ <- summary(model_30minsq_)
+gc()
+
+model_60min_ <- felm_DK_se(as.formula(str_c("abslogreturn_60min_oc ~ time + time:mention + time:abslogreturn_60min_oc_1lag + 
+                                              time:abslogreturn_60min_oc_2lag + time:abslogreturn_60min_oc_3lag + time:abslogreturn_60min_oc_4lag +
+                                              ", controls_base, "| Code + period")), intraday_60min_df1)
+model_60min_ <- summary(model_60min_)
+gc()
+
+model_60minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_60min_oc ~ time + time:mention + time:sqlogreturn_60min_oc_1lag + 
+                                              time:sqlogreturn_60min_oc_2lag + time:sqlogreturn_60min_oc_3lag + time:sqlogreturn_60min_oc_4lag +
+                                              ", controls_base, "| Code + period")), intraday_60min_df1)
+model_60minsq_ <- summary(model_60minsq_)
+gc()
 
 
-
-model_30min <- felm_DK_se(as.formula(str_c("abslogreturn_30min_oc ~ time:mention + time + ", controls_base, "| Code + period")), intraday_30min_df1)
-model_30minsq_ <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ time:mention + time*sqlogreturn_30min_oc_1lag +", controls_base, "| Code + period")), intraday_30min_df1)
-model_60min <- felm_DK_se(as.formula(str_c("abslogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
-model_60minsq <- felm_DK_se(as.formula(str_c("sqlogreturn_60min_oc ~ time:mention + time +", controls_base, "| Code + period")), intraday_60min_df1)
-
-
-model_30min_1 <- felm_DK_se(as.formula(str_c("sqlogreturn_30min_oc ~ mention + sqlogreturn_30min_oc_1lag + 
-                                             VI_put_1lag + VI_call_1lag | Code + period")), 
-                            filter(intraday_30min_df1, time == times_30min[18]))
-
-intraday_30min_df1
 
 hourly_coefs <- tibble()
 # 30minsq
-temp_coefs <- data.frame(summary(model_30minsq)$coefficients)
+temp_coefs <- data.frame(model_30minsq_$coefficients)
 temp_coefs$regressor <- rownames(temp_coefs) 
 temp_coefs$model <- "sqlogreturn_30min_oc"
 hourly_coefs <- rbind(hourly_coefs, temp_coefs)
 # 30min
-temp_coefs <- data.frame(summary(model_30min)$coefficients)
+temp_coefs <- data.frame(model_30min_$coefficients)
 temp_coefs$regressor <- rownames(temp_coefs) 
 temp_coefs$model <- "abslogreturn_30min_oc"
 hourly_coefs <- rbind(hourly_coefs, temp_coefs)
 # 60minsq
-temp_coefs <- data.frame(summary(model_60minsq)$coefficients)
+temp_coefs <- data.frame(model_60minsq_$coefficients)
 temp_coefs$regressor <- rownames(temp_coefs) 
 temp_coefs$model <- "sqlogreturn_60min_oc"
 hourly_coefs <- rbind(hourly_coefs, temp_coefs)
 # 60min
-temp_coefs <- data.frame(summary(model_60min)$coefficients)
+temp_coefs <- data.frame(model_60min_$coefficients)
 temp_coefs$regressor <- rownames(temp_coefs) 
 temp_coefs$model <- "abslogreturn_60min_oc"
 hourly_coefs <- rbind(hourly_coefs, temp_coefs)
 
 hourly_coefs <- hourly_coefs %>%
-  filter(str_detect(regressor, "time")) %>%
+  filter(str_detect(regressor, "time") & !str_detect(regressor, "lag")) %>%
   mutate(time = str_extract(regressor, "[0-9]+:[0-9]+"),
          type = case_when(str_detect(regressor, "mention") ~ "Article effect", 
                           str_detect(model, "30min") ~ "Half hour fixed effects", 
@@ -600,42 +613,46 @@ hourly_coefs <- hourly_coefs %>%
 ## 30min plot
 hourly_coefs %>%
   filter(model == "abslogreturn_30min_oc") %>%
+  mutate(coef = coef*100, se = se*100) %>%
   ggplot(aes(x = time)) + theme_bw() + facet_wrap(~type) + 
   geom_ribbon(aes(ymax = coef + 1.96*abs(se), ymin = coef - 1.96*abs(se), group = 1), alpha = 0.2) +
   geom_line(aes( y = coef, group = 1)) + 
   geom_hline(aes(yintercept = 0), linetype = "dashed") + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(y = "Coefficient (30 min absolute return)", x = "Time on day of article")
-ggsave("figures/effect_timeofday_30min.pdf", width = 6, height = 3)
+ggsave("figures/effect_timeofday_30min_new.pdf", width = 6, height = 3)
 ## 30min squared plot
 hourly_coefs %>%
   filter(model == "sqlogreturn_30min_oc") %>%
+  mutate(coef = coef*100, se = se*100) %>%
   ggplot(aes(x = time)) + theme_bw() + facet_wrap(~type) + 
   geom_ribbon(aes(ymax = coef + 1.96*abs(se), ymin = coef - 1.96*abs(se), group = 1), alpha = 0.2) +
   geom_line(aes( y = coef, group = 1)) + 
   geom_hline(aes(yintercept = 0), linetype = "dashed") + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(y = "Coefficient (30 min squared return)", x = "Time on day of article")
-ggsave("figures/effect_timeofday_30minsq.pdf", width = 6, height = 3)
+ggsave("figures/effect_timeofday_30minsq_new.pdf", width = 6, height = 3)
 ## 60 min plot
 hourly_coefs %>%
   filter(model == "abslogreturn_60min_oc") %>%
+  mutate(coef = coef*100, se = se*100) %>%
   ggplot(aes(x = time)) + theme_bw() + facet_wrap(~type) + 
   geom_ribbon(aes(ymax = coef + 1.96*abs(se), ymin = coef - 1.96*abs(se), group = 1), alpha = 0.2) +
   geom_line(aes( y = coef, group = 1)) + 
   geom_hline(aes(yintercept = 0), linetype = "dashed") + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(y = "Coefficient (60 min absolute return)", x = "Time on day of article")
-ggsave("figures/effect_timeofday_60min.pdf", width = 6, height = 3)
+ggsave("figures/effect_timeofday_60min_new.pdf", width = 6, height = 3)
 ## 60min squared plot
 hourly_coefs %>%
   filter(model == "sqlogreturn_60min_oc") %>%
+  mutate(coef = coef*100, se = se*100) %>%
   ggplot(aes(x = time)) + theme_bw() + facet_wrap(~type) + 
   geom_ribbon(aes(ymax = coef + 1.96*abs(se), ymin = coef - 1.96*abs(se), group = 1), alpha = 0.2) +
   geom_line(aes( y = coef, group = 1)) + 
   geom_hline(aes(yintercept = 0), linetype = "dashed") + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(y = "Coefficient (60 min squared return)", x = "Time on day of article")
-ggsave("figures/effect_timeofday_60minsq.pdf", width = 6, height = 3)
+ggsave("figures/effect_timeofday_60minsq_new.pdf", width = 6, height = 3)
 
 
