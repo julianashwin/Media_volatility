@@ -1039,6 +1039,25 @@ stargazer(model1, model2, model3, model4, model5, model6,
 
 
 
+ttests_df <- read_csv("/Users/julianashwin/Documents/GitHub/Media_volatility/data/quartile_coefs.csv")
+ttests_df %>%
+  filter(var2 <= var1) %>%
+  mutate(sig_level = case_when(abs(test) > 2.576 ~ "***",abs(test) > 1.96 ~ "**", abs(test) > 1.645 ~ "*", TRUE ~ "")) %>%
+  mutate(test_text = str_c(sprintf(fmt = "%01.3f",test), sig_level)) %>%
+  ggplot(aes(x = as.character(var1), y = as.character(var2), fill = test)) + theme_bw() + 
+  facet_wrap(~depvar) +
+  geom_tile(color = "white") + 
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-2.5,2.5), space = "Lab") +
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.3, hjust=1)) + 
+  geom_text(aes(label = test_text), color = "black", size = 2.3) + 
+  labs(x = "Quartile coefficient 1", y = "Quartile coefficient 2", fill = "t statistic") # + 
+  #ggtitle("Test for difference in coefficients across quartiles, with no information controls and logged volatility")
+ggsave("/Users/julianashwin/Documents/GitHub/Media_volatility/data/quartile_coefs_test.pdf", 
+       width = 8, height = 2.5)
+
+  
+
 "
 Spillover effects
 "
