@@ -105,8 +105,9 @@ panel_df %>%
   geom_line(aes(x = year, y = extra_vol_bils*25, linetype = "Average daily value of volume effect")) +
   geom_line(aes(x = year, y = extra_movement, linetype = "Average daily value of volatilty effect")) + 
   scale_y_continuous(sec.axis = sec_axis(~ . /25, name = "Daily volume effect (2015 US$ billion)")) + 
-  labs(x = "Year", y = "Daily volatility effect (2015 US$ million)", linetype = "")
-ggsave("figures/econ_significance.pdf", width = 8, height = 3.5)
+  labs(x = "Year", y = "Daily volatility effect (2015 US$ million)", linetype = "") + 
+  theme(legend.position = "top")
+ggsave("figures/econ_significance.pdf", width = 6, height = 3.5)
 
 
 panel_df %>%
@@ -263,7 +264,9 @@ panel_online_df %>%
   ggplot() + theme_bw() + 
   geom_histogram(aes(x = similarity, group = Combo, fill = Combo), position = "dodge") +
   labs(x = "Cosine similarity of online and print article", y = "Count", 
-       fill = "Matched online article")
+       fill = "Matched online article") + 
+  scale_fill_manual(values = c("black", "grey")) + 
+  theme(legend.position = "top")
 ggsave("figures/online_article_similarity.pdf", width = 5, height = 3.5)
 
 # How many matches?
